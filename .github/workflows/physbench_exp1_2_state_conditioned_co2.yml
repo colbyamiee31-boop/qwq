@@ -1,0 +1,82 @@
+name: PhysBench EXP1.2 State-Conditioned Directional Validity
+
+on:
+  push:
+    branches: [exp1-2-state-conditioned-co2]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  m1-state-conditioned:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install frozen M1
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install 'numpy==1.26.4'
+          python -m pip install 'git+https://github.com/BartvLaatum/GreenLight-Gym2.git@2d3febb1ea002b24b452e32293e990beb78d3ce1'
+          python -m pip freeze | sort > EXP1_2_M1_PIP_FREEZE.txt
+      - name: Run M1 EXP1.2
+        run: python physbench/exp1_2/m1_state_conditioned_co2.py
+      - name: Upload M1 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exp1-2-m1-state-conditioned-co2
+          path: |
+            EXP1_2_M1_STATE_CONDITIONED_CO2.json
+            EXP1_2_M1_PIP_FREEZE.txt
+            physbench/exp1_2/PROTOCOL.md
+            physbench/exp1_2/m1_state_conditioned_co2.py
+            physbench/exp0_5/benchmark_forcing.csv
+            physbench/exp0_5/matched_initial_state.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  m2-state-conditioned:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Clone frozen M2 and install legacy-compatible stack
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --no-tags https://github.com/jdsjxin/CSGtom.git CSGtom
+          cd CSGtom
+          git checkout --detach bea8c3b0a1324162a4b5487db578aa674c8b587c
+          test "$(git rev-parse HEAD)" = "bea8c3b0a1324162a4b5487db578aa674c8b587c"
+          cd ..
+          python -m pip install --upgrade pip
+          python -m pip install 'numpy==1.23.5' 'scipy==1.14.1' 'pandas==2.2.3' 'xlrd==2.0.1'
+          python -m pip freeze | sort > EXP1_2_M2_PIP_FREEZE.txt
+      - name: Run M2 EXP1.2
+        run: |
+          cd CSGtom/models
+          python ../../physbench/exp1_2/m2_state_conditioned_co2.py
+      - name: Upload M2 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exp1-2-m2-state-conditioned-co2
+          path: |
+            EXP1_2_M2_STATE_CONDITIONED_CO2.json
+            EXP1_2_M2_PIP_FREEZE.txt
+            physbench/exp1_2/PROTOCOL.md
+            physbench/exp1_2/m2_state_conditioned_co2.py
+            physbench/exp0_5/benchmark_forcing.csv
+            physbench/exp0_5/matched_initial_state.json
+          if-no-files-found: warn
+          retention-days: 30
