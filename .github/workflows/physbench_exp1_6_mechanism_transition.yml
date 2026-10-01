@@ -40,7 +40,7 @@ jobs:
         run: |
           set -euxo pipefail
           python physbench/exp1_5/m1_closure_residual_audit_adapter.py
-          python physbench/exp1_6/run.py --model M1 --model-source GreenLight-Gym2 --out evidence/M1_grid
+          python physbench/exp1_6/hosted_run.py --model M1 --model-source GreenLight-Gym2 --out evidence/M1_grid
           python physbench/exp1_6/refine.py --parent evidence/M1_grid --model-source GreenLight-Gym2 --out evidence/M1_refined
           python physbench/exp1_6/polish.py --parent evidence/M1_refined --model-source GreenLight-Gym2 --out evidence/M1_audited
           python physbench/exp1_6/verify.py evidence/M1_audited
