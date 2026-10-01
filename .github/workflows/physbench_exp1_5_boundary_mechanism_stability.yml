@@ -25,11 +25,11 @@ jobs:
           python -m pip install 'numpy==1.26.4'
           python -m pip install 'git+https://github.com/BartvLaatum/GreenLight-Gym2.git@2d3febb1ea002b24b452e32293e990beb78d3ce1'
           python -m pip freeze | sort > EXP1_5_M1_PIP_FREEZE.txt
-      - name: Run M1 EXP1.5 with read-only quadrature error control
+      - name: Run M1 EXP1.5 on frozen native state path
         shell: bash
         run: |
           set -euxo pipefail
-          python physbench/exp1_5/m1_quadrature_error_control_adapter.py
+          python physbench/exp1_5/m1_native_path_flux_adapter.py
       - name: Upload M1 evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -44,6 +44,7 @@ jobs:
             EXP1_5_M1_SURFACE_REGRESSION_SCAN.csv
             EXP1_5_M1_PIP_FREEZE.txt
             physbench/exp1_5/m1_boundary_mechanism_stability.py
+            physbench/exp1_5/m1_native_path_flux_adapter.py
             physbench/exp1_5/m1_quadrature_error_control_adapter.py
             physbench/exp1_5/PROTOCOL.md
             physbench/exp0_5/benchmark_forcing.csv
