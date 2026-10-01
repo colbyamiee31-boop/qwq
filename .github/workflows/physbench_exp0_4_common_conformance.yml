@@ -1,0 +1,147 @@
+name: PhysBench EXP0.4 Common Adapter Conformance
+
+on:
+  push:
+    branches: [exp0-4-common-contract]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  m1-common-conformance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install frozen M1
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install 'numpy==1.26.4'
+          python -m pip install 'git+https://github.com/BartvLaatum/GreenLight-Gym2.git@2d3febb1ea002b24b452e32293e990beb78d3ce1'
+      - name: Run M1 common conformance
+        run: |
+          cat > run_m1.py <<'PY'
+          import json, math
+          from pathlib import Path
+          import numpy as np
+          import gymnasium as gym
+          import gl_gym
+          from gl_gym.environments.utils import co2dens2ppm
+
+          VERSION='0.1.0'; DT=900; H=3600; seq=[0.1,0.5,0.9,0.3]
+          STATE_KEYS=['time_s','air_temperature_c','air_vapor_pressure_pa','air_rh_pct','air_co2_ppm','canopy_temperature_c']
+          WEATHER_KEYS=['time_s','global_radiation_w_m2','outdoor_temperature_c','outdoor_vapor_pressure_pa','outdoor_rh_pct','outdoor_co2_ppm','wind_speed_m_s','sky_temperature_c']
+          ACTION_KEYS=['time_s','ventilation_command_fraction']
+          controls=['uBoil','uCO2','uThScr','uVent','uLamp','uBlScr']
+          def sat(t): return 610.78*math.exp(17.2694*t/(t+238.3))
+          def rh(t,vp): return min(100,max(0,100*vp/sat(t)))
+          def cstate(t,x):
+              return {'time_s':float(t),'air_temperature_c':float(x[2]),'air_vapor_pressure_pa':float(x[15]),'air_rh_pct':rh(float(x[2]),float(x[15])),'air_co2_ppm':float(co2dens2ppm(float(x[2]),float(x[0])*1e-6)),'canopy_temperature_c':float(x[4])}
+          def cweather(t,d):
+              return {'time_s':float(t),'global_radiation_w_m2':float(d[0]),'outdoor_temperature_c':float(d[1]),'outdoor_vapor_pressure_pa':float(d[2]),'outdoor_rh_pct':rh(float(d[1]),float(d[2])),'outdoor_co2_ppm':float(co2dens2ppm(float(d[1]),float(d[3])*1e-6)),'wind_speed_m_s':float(d[4]),'sky_temperature_c':float(d[5])}
+          def action(t,u): return {'time_s':float(t),'ventilation_command_fraction':float(u)}
+          def check_keys(obj,keys):
+              assert list(obj.keys())==keys,(list(obj.keys()),keys)
+              assert all(np.isfinite(v) for v in obj.values())
+          env=gym.make('gl_gym/GreenLightTomato-v0',controlled_inputs=controls,normalize_actions=False,parameter_provider='fixed')
+          _,info0=env.reset(seed=3407,options={'scenario':{'location':'Amsterdam','growth_year':2010,'start_day':59}})
+          states=[cstate(0,env.unwrapped.x)]; weather=[]; req=[]; app=[]; native_err=[]
+          for i,u in enumerate(seq):
+              t=i*DT; weather.append(cweather(t,env.unwrapped.weather_data[env.unwrapped.timestep])); req.append(action(t,u))
+              vec=np.asarray([0,0,0,u,0,0],dtype=np.float32)
+              _,_,term,trunc,info=env.step(vec); actual=np.asarray(info['controls'],dtype=float)
+              native_err.append(float(np.max(np.abs(actual-vec))))
+              assert np.array_equal(actual.astype(np.float32),vec)
+              app.append(action(t,actual[3])); states.append(cstate(t+DT,env.unwrapped.x))
+              assert not term and not trunc
+          env.close()
+          for x in states: check_keys(x,STATE_KEYS)
+          for x in weather: check_keys(x,WEATHER_KEYS)
+          for x in req+app: check_keys(x,ACTION_KEYS)
+          out={'model_id':'M1','model_name':'GreenLight-Gym2','contract_version':VERSION,'common_sample_period_s':DT,'internal_integration_step_s':900,'state_schema':STATE_KEYS,'weather_schema':WEATHER_KEYS,'action_schema':ACTION_KEYS,'states':states,'weather':weather,'requested_actions':req,'applied_actions':app,'requested_equals_applied':max(native_err)==0,'native_max_abs_error':max(native_err),'capabilities':{'natural_ventilation':{'support':'native','native_symbol':'uVent','dose_basis':'native_command_fraction','cross_model_equivalence':'semantic_only_not_equal_airflow'},'heating':{'support':'native','native_symbol':'uBoil','cross_model_equivalence':'model_specific_extension'}},'gate_pass':True}
+          Path('EXP0_4_M1_COMMON_CONFORMANCE.json').write_text(json.dumps(out,indent=2),encoding='utf-8')
+          print(json.dumps({'M1_common_conformance':True,'native_max_abs_error':max(native_err)},indent=2))
+          PY
+          python run_m1.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exp0-4-m1-common-conformance
+          path: EXP0_4_M1_COMMON_CONFORMANCE.json
+          retention-days: 30
+
+  m2-common-conformance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Clone frozen M2 and install legacy compatibility stack
+        run: |
+          git clone --no-tags https://github.com/jdsjxin/CSGtom.git CSGtom
+          cd CSGtom
+          git checkout --detach bea8c3b0a1324162a4b5487db578aa674c8b587c
+          test "$(git rev-parse HEAD)" = "bea8c3b0a1324162a4b5487db578aa674c8b587c"
+          cd ..
+          python -m pip install --upgrade pip
+          python -m pip install 'numpy==1.23.5' 'scipy==1.14.1' 'pandas==2.2.3' 'xlrd==2.0.1'
+      - name: Run M2 common conformance
+        run: |
+          cat > run_m2.py <<'PY'
+          import json, math, os, sys
+          from pathlib import Path
+          import numpy as np
+          C=Path('CSGtom').resolve(); sys.path.insert(0,str(C)); os.chdir(C/'models')
+          from models.csg_climate import CSG_Climate
+          from parameters import example
+          from functions import csg_fun
+
+          VERSION='0.1.0'; DT=900; H=3600; seq=[0.1,0.5,0.9,0.3]
+          STATE_KEYS=['time_s','air_temperature_c','air_vapor_pressure_pa','air_rh_pct','air_co2_ppm','canopy_temperature_c']
+          WEATHER_KEYS=['time_s','global_radiation_w_m2','outdoor_temperature_c','outdoor_vapor_pressure_pa','outdoor_rh_pct','outdoor_co2_ppm','wind_speed_m_s','sky_temperature_c']
+          ACTION_KEYS=['time_s','ventilation_command_fraction']
+          def sat(t): return 610.78*math.exp(17.2694*t/(t+238.3))
+          def rh(t,vp): return min(100,max(0,100*vp/sat(t)))
+          def vp(t,rhp): return rhp/100*sat(t)
+          def cstate(t,s): return {'time_s':float(t),'air_temperature_c':float(s['T_air']),'air_vapor_pressure_pa':float(s['VP']),'air_rh_pct':rh(float(s['T_air']),float(s['VP'])),'air_co2_ppm':float(s['CO2']),'canopy_temperature_c':float(s['T_can'])}
+          def cweather(t,m):
+              T=float(np.asarray(m.d['f_Tem'](t)).reshape(-1)[0]); RHf=float(np.asarray(m.d['f_RH'](t)).reshape(-1)[0])
+              return {'time_s':float(t),'global_radiation_w_m2':float(np.asarray(m.d['f_Rad'](t)).reshape(-1)[0]),'outdoor_temperature_c':T,'outdoor_vapor_pressure_pa':vp(T,100*RHf),'outdoor_rh_pct':100*RHf,'outdoor_co2_ppm':float(np.asarray(m.d['f_CO2'](t)).reshape(-1)[0]),'wind_speed_m_s':float(np.asarray(m.d['f_Wind'](t)).reshape(-1)[0]),'sky_temperature_c':float(np.asarray(m.d['f_Tsky'](t)).reshape(-1)[0])}
+          def action(t,u): return {'time_s':float(t),'ventilation_command_fraction':float(u)}
+          def native(t):
+              i=min(int(float(t)//DT),len(seq)-1); return {'u_blanket':0.0,'u_vent':seq[i],'u_venttop':1.0,'u_ventside':0.0,'u_venttopbot':0.0}
+          def check_keys(obj,keys):
+              assert list(obj.keys())==keys,(list(obj.keys()),keys); assert all(np.isfinite(v) for v in obj.values())
+          p=example.parameters(); p['StartTime']='2017-09-01T00:00'; p['EndTime']='2017-09-01T01:00'; p['ctl_vent_type']='timebasedControl'; p['ctl_blank_type']='timebasedControl'; p['outdoorDataFileURL']='../data/example_data.xls'; p['UFileURL']='../data/example_u.xls'
+          tsim=np.arange(0,H+p['dtsim'],p['dtsim'],dtype=float); x0={n:p['InitialValues'][i] for i,n in enumerate(p['StateVariable'])}; m=CSG_Climate(tsim,p['dt'],x0,p)
+          m.U={k:(lambda t,k=k:native(t)[k]) for k in ['u_blanket','u_vent','u_venttop','u_ventside','u_venttopbot']}
+          original=csg_fun.ctl_csg1; rec=[]
+          def logged(p_,D,d,Tair,t,U):
+              o=original(p_,D,d,Tair,t,U); r=native(t); rec.append((float(t),r['u_blanket'],float(np.asarray(o[0]).reshape(-1)[0]),r['u_vent'],float(np.asarray(o[1]).reshape(-1)[0]),r['u_venttopbot'],float(np.asarray(o[2]).reshape(-1)[0]),r['u_ventside'],float(np.asarray(o[3]).reshape(-1)[0]))); return o
+          csg_fun.ctl_csg1=logged
+          try: y=m.run((0.0,float(H)))
+          finally: csg_fun.ctl_csg1=original
+          errs=[abs(r[i]-r[i+1]) for r in rec for i in [1,3,5,7]]; maxerr=max(errs)
+          assert maxerr==0.0
+          states=[]
+          for t in range(0,H+1,DT):
+              idx=int(t/p['dt']); s={k:float(np.asarray(y[k])[idx]) for k in p['StateVariable']}; states.append(cstate(t,s))
+          weather=[cweather(t,m) for t in range(0,H,DT)]; req=[action(t,seq[i]) for i,t in enumerate(range(0,H,DT))]; app=[]
+          for i,t in enumerate(range(0,H,DT)):
+              rr=[r for r in rec if r[0]==float(t)]; assert rr; app.append(action(t,rr[0][4]))
+          for x in states: check_keys(x,STATE_KEYS)
+          for x in weather: check_keys(x,WEATHER_KEYS)
+          for x in req+app: check_keys(x,ACTION_KEYS)
+          out={'model_id':'M2','model_name':'CSGtom','contract_version':VERSION,'common_sample_period_s':DT,'internal_integration_step_s':30,'state_schema':STATE_KEYS,'weather_schema':WEATHER_KEYS,'action_schema':ACTION_KEYS,'states':states,'weather':weather,'requested_actions':req,'applied_actions':app,'requested_equals_applied':maxerr==0,'native_max_abs_error':maxerr,'capabilities':{'natural_ventilation':{'support':'native','native_symbol':'u_vent','dose_basis':'native_command_fraction','cross_model_equivalence':'semantic_only_not_equal_airflow'},'heating':{'support':'external_hook','native_symbol':'ext_Heat_air','cross_model_equivalence':'not_common_core'}},'batch_rollout_required':True,'stateful_step_supported_by_frozen_source':False,'gate_pass':True}
+          Path('../../EXP0_4_M2_COMMON_CONFORMANCE.json').write_text(json.dumps(out,indent=2),encoding='utf-8')
+          print(json.dumps({'M2_common_conformance':True,'native_max_abs_error':maxerr},indent=2))
+          PY
+          python run_m2.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exp0-4-m2-common-conformance
+          path: EXP0_4_M2_COMMON_CONFORMANCE.json
+          retention-days: 30
