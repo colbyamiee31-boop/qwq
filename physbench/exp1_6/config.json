@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "horizon_start_s": 300,
+  "horizon_stop_s": 1800,
+  "horizon_step_s": 60,
+  "co2_start_ppm": 250,
+  "co2_stop_ppm": 600,
+  "coarse_co2_step_ppm": 25,
+  "fine_co2_step_ppm": 12.5,
+  "root_width_ppm": 0.0001,
+  "root_residual_ppm": 0.0000001,
+  "dominant_pair_tolerance_ppm": 0.000001,
+  "root_dedup_ppm": 0.001,
+  "local_stability_offset_ppm": 0.1,
+  "max_pair_evaluations_per_model": 60000,
+  "intersection_horizon_resolution_s": {"M1": 1, "M2": 60},
+  "coverage_claim": "finite-grid sampled phase map; no global completeness certificate",
+  "parameter_retuning": false,
+  "solver_changes": false
+}
