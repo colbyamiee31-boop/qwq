@@ -1,0 +1,307 @@
+name: PhysBench EXP0.3 M2 CSGtom Runtime Gate
+
+on:
+  push:
+    branches: [exp0-3-m2-csgtom]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  m2-csgtom-runtime-gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Clone frozen CSGtom source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --no-tags https://github.com/jdsjxin/CSGtom.git CSGtom
+          cd CSGtom
+          git checkout --detach bea8c3b0a1324162a4b5487db578aa674c8b587c
+          test "$(git rev-parse HEAD)" = "bea8c3b0a1324162a4b5487db578aa674c8b587c"
+          grep -q "CSGtom v1.0.1" README.md
+          test -f data/example_data.xls
+          test -f data/example_u.xls
+          test -f models/csg_climate.py
+          test -f functions/csg_fun.py
+          git rev-parse HEAD > ../M2_SOURCE_COMMIT.txt
+
+      - name: Install frozen compatibility environment
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install \
+            'numpy==1.26.4' \
+            'scipy==1.14.1' \
+            'pandas==2.2.3' \
+            'xlrd==2.0.1'
+          python - <<'PY'
+          import sys, numpy, scipy, pandas, xlrd
+          print('python=', sys.version)
+          print('numpy=', numpy.__version__)
+          print('scipy=', scipy.__version__)
+          print('pandas=', pandas.__version__)
+          print('xlrd=', xlrd.__version__)
+          assert numpy.__version__ == '1.26.4'
+          assert scipy.__version__ == '1.14.1'
+          assert pandas.__version__ == '2.2.3'
+          assert xlrd.__version__ == '2.0.1'
+          PY
+          python -m pip freeze | sort > EXP0_3_M2_RUNTIME_PIP_FREEZE.txt
+
+      - name: Execute M2 full runtime gate
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd CSGtom/models
+          cat > EXP0_3_M2_FULL_RUNTIME_GATE.py <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+          import time
+          from pathlib import Path
+
+          import numpy as np
+          import pandas as pd
+          import scipy
+          import xlrd
+
+          sys.path.insert(0, str(Path('..').resolve()))
+
+          from models.csg_climate import CSG_Climate
+          from parameters import example
+          from functions import csg_fun
+
+          FROZEN_COMMIT = 'bea8c3b0a1324162a4b5487db578aa674c8b587c'
+          DECLARED_RELEASE = 'v1.0.1'
+          CONTROL_KEYS = ['u_blanket','u_vent','u_venttop','u_ventside','u_venttopbot']
+          START = '2017-09-01T00:00'
+          END = '2017-09-01T03:00'
+          DURATION_S = 3 * 3600
+
+          def scalar(x):
+              a = np.asarray(x, dtype=float).reshape(-1)
+              if a.size != 1:
+                  raise ValueError(f'Expected scalar-like value, got shape {np.asarray(x).shape}')
+              return float(a[0])
+
+          def checked_controls(values):
+              missing = [k for k in CONTROL_KEYS if k not in values]
+              if missing:
+                  raise ValueError(f'Missing controls: {missing}')
+              out = {}
+              for k in CONTROL_KEYS:
+                  v = float(values[k])
+                  if not np.isfinite(v) or v < 0.0 or v > 1.0:
+                      raise ValueError(f'Control {k} outside [0,1]: {v}')
+                  out[k] = v
+              return out
+
+          def constant_U(values):
+              values = checked_controls(values)
+              return {k: (lambda t, v=v: v) for k, v in values.items()}
+
+          def build_model(control_values):
+              p = example.parameters()
+              p['StartTime'] = START
+              p['EndTime'] = END
+              p['ctl_vent_type'] = 'timebasedControl'
+              p['ctl_blank_type'] = 'timebasedControl'
+              p['outdoorDataFileURL'] = '../data/example_data.xls'
+              p['UFileURL'] = '../data/example_u.xls'
+              tsim = np.arange(0, DURATION_S + p['dtsim'], p['dtsim'], dtype=float)
+              x0 = {name: p['InitialValues'][i] for i, name in enumerate(p['StateVariable'])}
+              model = CSG_Climate(tsim, p['dt'], x0, p)
+              model.U = constant_U(control_values)
+              return model, p
+
+          def state_matrix(y, state_keys):
+              missing = [k for k in state_keys if k not in y]
+              if missing:
+                  raise AssertionError(f'Missing returned state keys: {missing}')
+              arr = np.vstack([np.asarray(y[k], dtype=float) for k in state_keys])
+              return arr
+
+          def rollout(control_values):
+              model, p = build_model(control_values)
+              requested = checked_controls(control_values)
+              records = []
+              orig = csg_fun.ctl_csg1
+
+              def logged_ctl(p_, D, d, Tair, t, U):
+                  result = orig(p_, D, d, Tair, t, U)
+                  records.append([
+                      float(t),
+                      requested['u_blanket'], scalar(result[0]),
+                      requested['u_vent'], scalar(result[1]),
+                      requested['u_venttopbot'], scalar(result[2]),
+                      requested['u_ventside'], scalar(result[3]),
+                      scalar(result[4]),
+                  ])
+                  return result
+
+              csg_fun.ctl_csg1 = logged_ctl
+              try:
+                  y = model.run((0.0, float(DURATION_S)))
+              finally:
+                  csg_fun.ctl_csg1 = orig
+
+              states = state_matrix(y, p['StateVariable'])
+              rec = np.asarray(records, dtype=float)
+              if rec.ndim != 2 or rec.shape[1] != 10:
+                  raise AssertionError(f'Unexpected control log shape: {rec.shape}')
+
+              errors = {
+                  'u_blanket': float(np.max(np.abs(rec[:,1] - rec[:,2]))),
+                  'u_vent': float(np.max(np.abs(rec[:,3] - rec[:,4]))),
+                  'u_venttopbot': float(np.max(np.abs(rec[:,5] - rec[:,6]))),
+                  'u_ventside': float(np.max(np.abs(rec[:,7] - rec[:,8]))),
+              }
+              requested_equals_applied = bool(all(v == 0.0 for v in errors.values()))
+              return {
+                  'states': states,
+                  'control_log': rec,
+                  'control_errors': errors,
+                  'requested_equals_applied': requested_equals_applied,
+                  'finite_all_states': bool(np.all(np.isfinite(states))),
+                  'state_keys': list(p['StateVariable']),
+                  'n_steps': int(states.shape[1]),
+                  'effective_vent_min': float(np.min(rec[:,9])),
+                  'effective_vent_max': float(np.max(rec[:,9])),
+              }
+
+          def maxdiff(a,b):
+              a = np.asarray(a, dtype=float)
+              b = np.asarray(b, dtype=float)
+              if a.shape != b.shape:
+                  raise AssertionError(f'Shape mismatch {a.shape} vs {b.shape}')
+              return float(np.max(np.abs(a-b)))
+
+          baseline_ctl = {
+              'u_blanket': 0.0,
+              'u_vent': 0.5,
+              'u_venttop': 1.0,
+              'u_ventside': 0.0,
+              'u_venttopbot': 0.0,
+          }
+          vent_low_ctl = dict(baseline_ctl, u_vent=0.1)
+          vent_high_ctl = dict(baseline_ctl, u_vent=0.9)
+          blanket_low_ctl = dict(baseline_ctl, u_blanket=0.0, u_vent=0.0)
+          blanket_high_ctl = dict(baseline_ctl, u_blanket=1.0, u_vent=0.0)
+
+          base1 = rollout(baseline_ctl)
+          base2 = rollout(baseline_ctl)
+          vent_low = rollout(vent_low_ctl)
+          vent_high = rollout(vent_high_ctl)
+          blank_low = rollout(blanket_low_ctl)
+          blank_high = rollout(blanket_high_ctl)
+
+          deterministic_state_diff = maxdiff(base1['states'], base2['states'])
+          deterministic_control_diff = maxdiff(base1['control_log'], base2['control_log'])
+          vent_state_diff = maxdiff(vent_low['states'], vent_high['states'])
+          blanket_state_diff = maxdiff(blank_low['states'], blank_high['states'])
+
+          all_runs = [base1, base2, vent_low, vent_high, blank_low, blank_high]
+          requested_equals_applied_all = bool(all(r['requested_equals_applied'] for r in all_runs))
+          finite_all = bool(all(r['finite_all_states'] for r in all_runs))
+
+          result = {
+              'experiment': 'PhysBench-GH EXP0.3',
+              'model_id': 'M2',
+              'model': 'CSGtom',
+              'repository': 'jdsjxin/CSGtom',
+              'frozen_commit': FROZEN_COMMIT,
+              'declared_release': DECLARED_RELEASE,
+              'runtime': {
+                  'python': sys.version,
+                  'numpy': np.__version__,
+                  'scipy': scipy.__version__,
+                  'pandas': pd.__version__,
+                  'xlrd': xlrd.__version__,
+              },
+              'scenario': {
+                  'start': START,
+                  'end': END,
+                  'duration_s': DURATION_S,
+                  'integration_dt_s': 30,
+                  'weather_source': 'repository data/example_data.xls',
+                  'control_mode': 'timebasedControl with adapter-supplied constant self.U',
+              },
+              'stochasticity': {
+                  'seed': None,
+                  'note': 'No stochastic RNG interface is used by this deterministic ODE/Euler execution path.'
+              },
+              'returned_state_count': len(base1['state_keys']),
+              'runtime_step_count': base1['n_steps'],
+              'finite_all_states': finite_all,
+              'deterministic_repeat': {
+                  'state_max_abs_diff': deterministic_state_diff,
+                  'control_log_max_abs_diff': deterministic_control_diff,
+                  'state_array_equal': bool(np.array_equal(base1['states'], base2['states'])),
+                  'control_log_array_equal': bool(np.array_equal(base1['control_log'], base2['control_log'])),
+                  'pass': bool(np.array_equal(base1['states'], base2['states']) and np.array_equal(base1['control_log'], base2['control_log'])),
+              },
+              'requested_equals_applied': {
+                  'pass': requested_equals_applied_all,
+                  'baseline_errors': base1['control_errors'],
+                  'vent_low_errors': vent_low['control_errors'],
+                  'vent_high_errors': vent_high['control_errors'],
+                  'blanket_low_errors': blank_low['control_errors'],
+                  'blanket_high_errors': blank_high['control_errors'],
+                  'checked_returned_controls': ['u_blanket','u_vent','u_venttopbot','u_ventside'],
+                  'u_venttop_note': 'u_venttop is consumed internally by ctl_csg1 but is not returned separately; it was fixed at 1.0 during the ventilation reachability test.'
+              },
+              'actuator_reachability': {
+                  'u_vent_low_vs_high_state_max_abs_diff': vent_state_diff,
+                  'u_vent_changes_trajectory': bool(not np.array_equal(vent_low['states'], vent_high['states'])),
+                  'u_vent_low_effective_vent_range': [vent_low['effective_vent_min'], vent_low['effective_vent_max']],
+                  'u_vent_high_effective_vent_range': [vent_high['effective_vent_min'], vent_high['effective_vent_max']],
+                  'u_blanket_open_vs_closed_state_max_abs_diff': blanket_state_diff,
+                  'u_blanket_changes_trajectory': bool(not np.array_equal(blank_low['states'], blank_high['states'])),
+              },
+              'interface_notes': {
+                  'native_controls': ['u_blanket','u_vent','u_venttop','u_ventside','u_venttopbot'],
+                  'external_hooks_not_counted_as_native_actuators': ['ext_Heat_air','ext_co2','ext_f','ext_vp','ext_par','ext_nir'],
+                  'run_u_argument_used_by_model': False,
+                  'model_uses_p_InitialValues_instead_of_x0_argument': True,
+              },
+          }
+          result['gate_pass'] = bool(
+              result['finite_all_states']
+              and result['returned_state_count'] == 40
+              and result['deterministic_repeat']['pass']
+              and result['requested_equals_applied']['pass']
+              and result['actuator_reachability']['u_vent_changes_trajectory']
+              and result['actuator_reachability']['u_blanket_changes_trajectory']
+          )
+
+          out = Path('../../EXP0_3_M2_FULL_RUNTIME_RESULT.json')
+          out.write_text(json.dumps(result, indent=2), encoding='utf-8')
+          Path('../../EXP0_3_M2_FULL_RUNTIME_GATE.py').write_text(Path(__file__).read_text(encoding='utf-8'), encoding='utf-8')
+          print(json.dumps(result, indent=2))
+          if not result['gate_pass']:
+              raise SystemExit('EXP0.3 M2 CSGtom full runtime gate failed')
+          PY
+          PYTHONPATH=.. python EXP0_3_M2_FULL_RUNTIME_GATE.py
+
+      - name: Upload M2 gate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: physbench-exp0-3-m2-csgtom-runtime-gate
+          path: |
+            EXP0_3_M2_FULL_RUNTIME_RESULT.json
+            EXP0_3_M2_FULL_RUNTIME_GATE.py
+            EXP0_3_M2_RUNTIME_PIP_FREEZE.txt
+            M2_SOURCE_COMMIT.txt
+          if-no-files-found: warn
+          retention-days: 30
