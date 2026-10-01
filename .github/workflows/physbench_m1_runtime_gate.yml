@@ -1,0 +1,165 @@
+name: PhysBench M1 Full Runtime Gate
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  m1-runtime-gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install frozen GreenLight-Gym2
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install 'numpy==1.26.4'
+          python -m pip install 'git+https://github.com/BartvLaatum/GreenLight-Gym2.git@2d3febb1ea002b24b452e32293e990beb78d3ce1'
+          python - <<'PY'
+          import sys, importlib.metadata as md, numpy, gymnasium, casadi, gl_gym
+          print('python=', sys.version)
+          print('gl-gym=', md.version('gl-gym'))
+          print('numpy=', numpy.__version__)
+          print('gymnasium=', gymnasium.__version__)
+          print('casadi=', casadi.__version__)
+          print('gl_gym_file=', gl_gym.__file__)
+          assert md.version('gl-gym') == '0.3.2'
+          assert numpy.__version__.startswith('1.')
+          assert gymnasium.__version__ == '0.29.0'
+          PY
+          python -m pip freeze | sort > pip_freeze.txt
+
+      - name: Execute deterministic full runtime gate
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat > m1_runtime_gate.py <<'PY'
+          import json
+          import sys
+          import importlib.metadata as md
+          import numpy as np
+          import gymnasium as gym
+          import casadi
+          import gl_gym
+
+          FROZEN_COMMIT = '2d3febb1ea002b24b452e32293e990beb78d3ce1'
+          SCENARIO = {'location': 'Amsterdam', 'growth_year': 2010, 'start_day': 59}
+          CONTROL_NAMES = ['uBoil','uCO2','uThScr','uVent','uLamp','uBlScr']
+
+          def checked_action(values):
+              a = np.asarray(values, dtype=np.float32)
+              if a.shape != (6,):
+                  raise ValueError(f'Expected 6 controls, got {a.shape}')
+              if not np.all(np.isfinite(a)):
+                  raise ValueError('Non-finite action')
+              if np.any(a < 0.0) or np.any(a > 1.0):
+                  raise ValueError(f'Physical action outside [0,1]: {a}')
+              return a
+
+          def make_env():
+              return gym.make(
+                  'gl_gym/GreenLightTomato-v0',
+                  controlled_inputs=CONTROL_NAMES,
+                  normalize_actions=False,
+                  parameter_provider='fixed',
+              )
+
+          def rollout(actions, seed=3407):
+              env = make_env()
+              obs, info0 = env.reset(seed=seed, options={'scenario': SCENARIO})
+              states = [env.unwrapped.x.copy()]
+              applied = []
+              for a in actions:
+                  a = checked_action(a)
+                  obs, reward, terminated, truncated, info = env.step(a)
+                  applied_u = np.asarray(info['controls'], dtype=float)
+                  if not np.array_equal(applied_u.astype(np.float32), a):
+                      raise AssertionError(f'Requested/applied mismatch: requested={a}, applied={applied_u}')
+                  states.append(env.unwrapped.x.copy())
+                  applied.append(applied_u.copy())
+                  if terminated or truncated:
+                      break
+              env.close()
+              return np.asarray(states), np.asarray(applied)
+
+          def maxdiff(a,b):
+              return float(np.max(np.abs(np.asarray(a)-np.asarray(b))))
+
+          baseline = checked_action([0.5,0.0,0.0,0.2,0.0,0.0])
+          actions = [baseline.copy() for _ in range(8)]
+          s1,u1 = rollout(actions)
+          s2,u2 = rollout(actions)
+
+          heat_low  = checked_action([0.1,0.0,0.0,0.2,0.0,0.0])
+          heat_high = checked_action([0.9,0.0,0.0,0.2,0.0,0.0])
+          vent_low  = checked_action([0.5,0.0,0.0,0.1,0.0,0.0])
+          vent_high = checked_action([0.5,0.0,0.0,0.9,0.0,0.0])
+
+          shl,_ = rollout([heat_low]*4)
+          shh,_ = rollout([heat_high]*4)
+          svl,_ = rollout([vent_low]*4)
+          svh,_ = rollout([vent_high]*4)
+
+          result = {
+              'repository': 'BartvLaatum/GreenLight-Gym2',
+              'frozen_commit': FROZEN_COMMIT,
+              'package_version': md.version('gl-gym'),
+              'runtime': {
+                  'python': sys.version,
+                  'numpy': np.__version__,
+                  'gymnasium': gym.__version__,
+                  'casadi': casadi.__version__,
+              },
+              'scenario': SCENARIO,
+              'seed': 3407,
+              'deterministic_repeat': {
+                  'state_max_abs_diff': maxdiff(s1,s2),
+                  'controls_max_abs_diff': maxdiff(u1,u2),
+                  'state_array_equal': bool(np.array_equal(s1,s2)),
+                  'controls_array_equal': bool(np.array_equal(u1,u2)),
+                  'pass': bool(np.array_equal(s1,s2) and np.array_equal(u1,u2)),
+              },
+              'requested_equals_applied': True,
+              'actuator_reachability': {
+                  'uBoil_low_vs_high_state_max_abs_diff': maxdiff(shl,shh),
+                  'uVent_low_vs_high_state_max_abs_diff': maxdiff(svl,svh),
+                  'uBoil_changes_trajectory': bool(not np.array_equal(shl,shh)),
+                  'uVent_changes_trajectory': bool(not np.array_equal(svl,svh)),
+              },
+          }
+          result['gate_pass'] = bool(
+              result['deterministic_repeat']['pass']
+              and result['requested_equals_applied']
+              and result['actuator_reachability']['uBoil_changes_trajectory']
+              and result['actuator_reachability']['uVent_changes_trajectory']
+          )
+
+          with open('EXP0_2_M1_FULL_RUNTIME_RESULT.json','w',encoding='utf-8') as f:
+              json.dump(result, f, indent=2)
+          print(json.dumps(result, indent=2))
+          if not result['gate_pass']:
+              raise SystemExit('M1 full runtime gate failed')
+          PY
+          python m1_runtime_gate.py
+
+      - name: Upload gate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: physbench-m1-runtime-gate
+          path: |
+            EXP0_2_M1_FULL_RUNTIME_RESULT.json
+            pip_freeze.txt
+          if-no-files-found: warn
+          retention-days: 30
