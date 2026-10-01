@@ -1,0 +1,95 @@
+name: PhysBench EXP1.4 Boundary Robustness
+
+on:
+  push:
+    branches: [exp1-4-boundary-robustness]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  m1-boundary-robustness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install frozen M1
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install 'numpy==1.26.4'
+          python -m pip install 'git+https://github.com/BartvLaatum/GreenLight-Gym2.git@2d3febb1ea002b24b452e32293e990beb78d3ce1'
+          python -m pip freeze | sort > EXP1_4_M1_PIP_FREEZE.txt
+      - name: Run M1 EXP1.4
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python physbench/exp1_4/m1_boundary_robustness.py
+      - name: Upload M1 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exp1-4-m1-boundary-robustness
+          path: |
+            EXP1_4_M1_BOUNDARY_ROBUSTNESS.json
+            EXP1_4_M1_CELL_SUMMARY.csv
+            EXP1_4_M1_RESPONSE_SCAN.csv
+            EXP1_4_M1_REFINED_ROOTS.csv
+            EXP1_4_M1_FACTOR_SUMMARY.csv
+            EXP1_4_M1_PIP_FREEZE.txt
+            physbench/exp1_4/m1_boundary_robustness.py
+            physbench/exp1_4/PROTOCOL.md
+            physbench/exp0_5/benchmark_forcing.csv
+            physbench/exp0_5/matched_initial_state.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  m2-boundary-robustness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Clone frozen M2 and install legacy-compatible stack
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --no-tags https://github.com/jdsjxin/CSGtom.git CSGtom
+          cd CSGtom
+          git checkout --detach bea8c3b0a1324162a4b5487db578aa674c8b587c
+          cd ..
+          python -m pip install --upgrade pip
+          python -m pip install 'numpy==1.23.5' 'scipy==1.14.1' 'pandas==2.2.3' 'xlrd==2.0.1'
+          python -m pip freeze | sort > EXP1_4_M2_PIP_FREEZE.txt
+      - name: Run M2 EXP1.4
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd CSGtom/models
+          python ../../physbench/exp1_4/m2_boundary_robustness.py
+          cd ../..
+      - name: Upload M2 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exp1-4-m2-boundary-robustness
+          path: |
+            EXP1_4_M2_BOUNDARY_ROBUSTNESS.json
+            EXP1_4_M2_CELL_SUMMARY.csv
+            EXP1_4_M2_RESPONSE_SCAN.csv
+            EXP1_4_M2_REFINED_ROOTS.csv
+            EXP1_4_M2_FACTOR_SUMMARY.csv
+            EXP1_4_M2_PIP_FREEZE.txt
+            physbench/exp1_4/m2_boundary_robustness.py
+            physbench/exp1_4/PROTOCOL.md
+            physbench/exp0_5/benchmark_forcing.csv
+            physbench/exp0_5/matched_initial_state.json
+          if-no-files-found: warn
+          retention-days: 30
