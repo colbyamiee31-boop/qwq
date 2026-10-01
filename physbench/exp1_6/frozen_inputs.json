@@ -1,0 +1,20 @@
+{
+  "physbench/exp0_5/benchmark_forcing.csv": "770cd596375cd18cd889decbb3d8520aa52f28bd6176fb898e7ddd242a2fcca0",
+  "physbench/exp0_5/m1_matched_gate.py": "799a900c554cbec8d670b2db82ca382d0f1d00844ced6c88ae933b3e482b7b33",
+  "physbench/exp0_5/m2_matched_gate.py": "6e2bf028bb6ab0d07160bf9b369f722b23c40850f51c6124642d669f7e77a03f",
+  "physbench/exp0_5/matched_initial_state.json": "c72cd0fd189569ada6b8e17e8fecb85e203073893d0c8ea46910a78a9ba9a5d0",
+  "physbench/exp1_3/PROTOCOL.md": "e023f29cdc5c8abc52f8d0b4ef030625965c0b3a0fe5dfa0e400f7c084f7ae93",
+  "physbench/exp1_3/m1_flux_decomposition.py": "a2520ded7f2c7102cf0dff2287732796f58c0276aafc34c774fba32d99c1c76d",
+  "physbench/exp1_3/m2_flux_decomposition.py": "4ee18e83dea14492f2b6d0848e472aecabc00b2821055350f395e2a9b68d5f12",
+  "physbench/exp1_4/PROTOCOL.md": "03f2304543dbfb05bea3f83079407461b8735c372d8315f94a33cb0fcbc26a39",
+  "physbench/exp1_4/m1_boundary_robustness.py": "fcaa0c13937478e130c16c28361f6a26414c7e8867c3f355178b7a933844fef6",
+  "physbench/exp1_4/m2_boundary_robustness.py": "d574e2e75a276f39a50e757098b3bd673650c5bae8e59a8144ec6655621601db",
+  "physbench/exp1_4/m2_short_horizon_geometry_adapter.py": "687bda92fd596b660ec9e01b75a1fadb074795924cd2d947a86e7755b75b3dc5",
+  "physbench/exp1_5/NUMERICAL_AUDIT_AMENDMENT.md": "b79e9f1d09f08d0fdd1ef5540a697150cc696287f8749480a48d190295c27c3f",
+  "physbench/exp1_5/PROTOCOL.md": "3beb4d31a9ecffc834604af58710080bf27f65d30247c2bd155222d427208446",
+  "physbench/exp1_5/m1_boundary_mechanism_stability.py": "971917f9d1fc69fcfb3edb34490a85b3f4c337d81d5ae04bc901e36cd9ab5115",
+  "physbench/exp1_5/m1_closure_residual_audit_adapter.py": "b855482dfb0d3a50b67d3e2d1eac34de5759421741c10b19947f54e37a778764",
+  "physbench/exp1_5/m1_native_path_flux_adapter.py": "29ab9fe26b06317e93352dcd396e3984c498b72d9cc04c1a13ecb345c4a12271",
+  "physbench/exp1_5/m1_quadrature_error_control_adapter.py": "b1fb4af0dc00cd4a35742322ccd57997f538c58df95b3dc7f125871af9ed0c50",
+  "physbench/exp1_5/m2_boundary_mechanism_stability.py": "5bfea6ad87c10cd990f87bb2958aa8f116a05c23959f4ca40bcde86618bba3cf"
+}
