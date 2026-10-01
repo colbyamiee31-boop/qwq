@@ -1,0 +1,57 @@
+name: VALIDATION-1.4 Gate A historical Linux confirmation
+on:
+  push:
+    branches: [validation-1-4-gate-a-linux-20261002]
+    paths: ['validation_gate_a/**', '.github/workflows/validation_gate_a_linux.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  historical-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11.16'
+      - name: Recover original inputs and pinned source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p payload evidence/environment wheels
+          python -m zipfile -e validation_gate_a/gate_a_payload.zip payload
+          git clone --no-checkout https://github.com/BartvLaatum/GreenLight-Gym2.git GreenLight-Gym2
+          git -C GreenLight-Gym2 checkout --detach 2d3febb1ea002b24b452e32293e990beb78d3ce1
+          test "$(git -C GreenLight-Gym2 rev-parse HEAD)" = 2d3febb1ea002b24b452e32293e990beb78d3ce1
+      - name: Install historical versions and preserve wheel provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install pip==26.2.1 2>&1 | tee evidence/environment/pip_bootstrap.log
+          python -m pip download --only-binary=:all: --no-deps -r payload/requirements-native.txt -d wheels 2>&1 | tee evidence/environment/wheel_download.log
+          python -m pip install --no-index --find-links wheels --no-deps -r payload/requirements-native.txt --report evidence/environment/native_install_report.json 2>&1 | tee evidence/environment/native_install.log
+          python -m pip install --no-deps --report evidence/environment/gl_gym_install_report.json 'git+https://github.com/BartvLaatum/GreenLight-Gym2.git@2d3febb1ea002b24b452e32293e990beb78d3ce1' 2>&1 | tee evidence/environment/gl_gym_install.log
+          python -m pip cache list --format=abspath | while IFS= read -r item; do if [[ "$item" == *gl_gym-0.3.2* ]]; then cp "$item" wheels/; fi; done
+      - name: EXP1.2 then Gate B/C with frozen definitions
+        run: python -u validation_gate_a/run_linux.py
+      - name: Final inventory
+        if: always()
+        shell: bash
+        run: |
+          python -m pip freeze > evidence/environment/final_pip_freeze.txt
+          cp validation_gate_a/run_linux.py evidence/
+          cp .github/workflows/validation_gate_a_linux.yml evidence/
+          cp payload/INPUT_SHA256.json evidence/
+          find evidence -type f -print0 | sort -z | xargs -0 sha256sum > RAW_SHA256SUMS.txt
+          cp RAW_SHA256SUMS.txt evidence/
+      - name: Preserve evidence and native wheels
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: validation-1-4-gate-a-linux
+          path: |
+            evidence/
+            wheels/
+          retention-days: 30
+          if-no-files-found: error
