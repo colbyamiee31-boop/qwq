@@ -62,7 +62,10 @@ jobs:
           python -m pip install 'numpy==1.23.5' 'scipy==1.14.1' 'pandas==2.2.3' 'xlrd==2.0.1'
           python -m pip freeze | sort > EXP0_5_M2_PIP_FREEZE.txt
       - name: Run M2 matched forcing/init gate
-        run: python physbench/exp0_5/m2_matched_gate.py
+        shell: bash
+        run: |
+          cd CSGtom/models
+          python ../../physbench/exp0_5/m2_matched_gate.py
       - name: Upload M2 evidence
         if: always()
         uses: actions/upload-artifact@v4
