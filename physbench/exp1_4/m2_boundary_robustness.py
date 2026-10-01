@@ -110,8 +110,8 @@ def build_model(horizon_s, state_id, forcing_row, c0, vent):
     # Align model-native clock with the selected benchmark forcing row.
     start = datetime.fromisoformat('2017-09-01T08:00:00') + timedelta(seconds=float(row['time_s']))
     end = start + timedelta(seconds=float(horizon_s))
-    model.p['StartTime'] = start.isoformat(timespec='seconds')
-    model.p['EndTime'] = end.isoformat(timespec='seconds')
+    model.p['StartTime'] = start.strftime('%Y-%m-%dT%H:%M')
+    model.p['EndTime'] = end.strftime('%Y-%m-%dT%H:%M')
     model.D = csg_shape.csg_shape(model.p)
 
     model.d = {
