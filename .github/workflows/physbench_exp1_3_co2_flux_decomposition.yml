@@ -68,7 +68,9 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          python physbench/exp1_3/m2_flux_decomposition.py
+          cd CSGtom/models
+          python ../../physbench/exp1_3/m2_flux_decomposition.py
+          cd ../..
       - name: Upload M2 evidence
         if: always()
         uses: actions/upload-artifact@v4
