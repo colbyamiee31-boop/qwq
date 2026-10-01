@@ -57,10 +57,15 @@ jobs:
           retention-days: 90
           if-no-files-found: error
 
-  m2-real-model:
+  m2-shard:
     needs: analytic-tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 360
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        state: [S_COOL_HUMID, S_NOMINAL, S_WARM_DRY]
+        forcing: [0, 6, 10]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -74,27 +79,50 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r physbench/exp1_6/requirements-m2.txt
           python -m pip freeze | sort > EXP1_6_M2_PIP_FREEZE.txt
-      - name: Reproduce M2 EXP1.5
+      - name: Reproduce frozen M2 EXP1.5
         run: |
           set -euxo pipefail
           (cd CSGtom/models && python ../../physbench/exp1_5/m2_boundary_mechanism_stability.py)
-      - name: Run sharded M2 EXP1.6
+      - name: Run one M2 phase-map stratum
         run: |
           set -euxo pipefail
-          python physbench/exp1_6/run_shards.py --model-source CSGtom --out evidence/M2_grid_shards --workers 6
-          python physbench/exp1_6/refine_shards.py --parents evidence/M2_grid_shards --model-source CSGtom --out evidence/M2_refined_shards --workers 6
-          python physbench/exp1_6/refine_shards.py --parents evidence/M2_refined_shards --model-source CSGtom --out evidence/M2_audited_shards --workers 6 --stage polish
+          python physbench/exp1_6/hosted_run.py --model M2 --model-source CSGtom --out evidence/grid --state ${{ matrix.state }} --forcing ${{ matrix.forcing }}
+          python physbench/exp1_6/refine.py --parent evidence/grid --model-source CSGtom --out evidence/refined
+          python physbench/exp1_6/polish.py --parent evidence/refined --model-source CSGtom --out evidence/final
+      - name: Upload M2 stratum evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.state }}_F${{ matrix.forcing }}
+          path: evidence/final/*
+          retention-days: 90
+          if-no-files-found: error
+
+  m2-aggregate:
+    needs: [analytic-tests, m2-shard]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: S_*_F*
+          path: evidence/M2_audited_shards
+          merge-multiple: false
+      - name: Aggregate and fail-closed verify M2 hosted evidence
+        run: |
+          set -euxo pipefail
           python physbench/exp1_6/aggregate.py evidence/M2_audited_shards evidence/M2_audited
           python physbench/exp1_6/verify.py evidence/M2_audited
-      - name: Upload M2 audit evidence
+      - name: Upload M2 aggregate evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: exp1-6-m2-hosted-ci
           path: |
-            evidence/
-            EXP1_5_M2_*
-            EXP1_6_M2_PIP_FREEZE.txt
+            evidence/M2_audited/
+            evidence/M2_audited_shards/*/identifiability_summary.json
+            evidence/M2_audited_shards/*/result.json
             physbench/exp1_6/
           retention-days: 90
           if-no-files-found: error
