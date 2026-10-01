@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, str(CSG))
 from models.csg_climate import CSG_Climate
 from parameters import example
-from functions import csg_fun
+from functions import csg_fun, csg_shape
 
 FORCING = ROOT / 'physbench/exp0_5/benchmark_forcing.csv'
 INIT = ROOT / 'physbench/exp0_5/matched_initial_state.json'
@@ -38,8 +38,10 @@ def pwc(column, scale=1.0):
     return fn
 
 p=example.parameters()
-p['StartTime']='2017-09-01T08:00'
-p['EndTime']='2017-09-01T11:00'
+# The frozen constructor insists that StartTime exists in example_data.xls.
+# 00:00 is known to exist from EXP0.3, so it is used only for construction.
+p['StartTime']='2017-09-01T00:00'
+p['EndTime']='2017-09-01T03:00'
 p['dtsim']=900
 p['dt']=30
 p['ctl_vent_type']='timebasedControl'; p['ctl_blank_type']='timebasedControl'
@@ -59,6 +61,13 @@ p['InitialValues']=iv
 tsim=np.arange(0,10800+p['dtsim'],p['dtsim'],dtype=float)
 x0={name:p['InitialValues'][i] for i,name in enumerate(p['StateVariable'])}
 model=CSG_Climate(tsim,p['dt'],x0,p)
+
+# Rebuild only the model-native solar geometry for a daylight 08:00-11:00 benchmark.
+# Geometry/physics equations are unchanged; the example XLS is no longer used after this point.
+model.p['StartTime']='2017-09-01T08:00'
+model.p['EndTime']='2017-09-01T11:00'
+model.D=csg_shape.csg_shape(model.p)
+
 model.d={
  'f_Rad':pwc('global_radiation_w_m2'),
  'f_Tem':pwc('outdoor_temperature_c'),
@@ -125,7 +134,7 @@ result={
  'forcing_semantics':'piecewise constant over each 900-s benchmark interval, evaluated at every 30-s Euler step',
  'matched_initial_state':init_export,'initial_state_abs_errors':init_errors,'initial_state_max_abs_error':float(max(init_errors.values())),
  'canonical_weather_export':weather_export,'forcing_abs_errors':forcing_errors,'forcing_max_abs_error':float(max(forcing_errors.values())),
- 'native_extension_match':{'soil_boundary_temperature_c':True,'csg_solar_geometry_remains_model_native':True},
+ 'native_extension_match':{'soil_boundary_temperature_c':True,'csg_solar_geometry_remains_model_native':True,'solar_geometry_clock':'2017-09-01T08:00 to 11:00'},
  'action_audit':{'ventilation_command_fraction':vent,'native_control':'u_vent','max_requested_applied_error':action_err,'u_venttop_fixed':1.0,'u_blanket_fixed':0.0},
  'finite_runtime_states':bool(finite),
  'noncommon_internal_state_policy':'all non-common CSGtom InitialValues retained from native parameter file',
