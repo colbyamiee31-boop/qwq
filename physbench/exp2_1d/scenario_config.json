@@ -1,0 +1,21 @@
+{
+  "experiment": "PhysBench-GH EXP2.1D",
+  "primary_horizon_min": 15,
+  "secondary_horizon_min": 30,
+  "primary_cohort_n": 61,
+  "mapping_scenarios": [
+    {"id":"STD_0p1_0p9","description":"EXP2.1C anchor standardized direction probe","kind":"fixed","low":0.1,"high":0.9},
+    {"id":"ABS_LINEAR","description":"status/100 mapped directly to native normalized command","kind":"absolute_linear"},
+    {"id":"ABS_COMPRESSED","description":"0.2 + 0.6*(status/100), preserving monotonic order while compressing range","kind":"absolute_compressed","offset":0.2,"scale":0.6},
+    {"id":"DELTA_FROM_0p3","description":"common 0.3 baseline plus observed status increment/100","kind":"delta_from_baseline","baseline":0.3}
+  ],
+  "canopy_offsets_c":[-0.5,0.0,0.5],
+  "forcing_representations":[
+    {"id":"SNAPSHOT_T0","description":"EXP2.1C anchor: constant event-time pre-action weather snapshot"},
+    {"id":"PRE15_MEDIAN","description":"constant median of t-15,t-10,t-5,t0 weather records; uses no post-event weather"}
+  ],
+  "bootstrap":{"cluster":"event_date","resamples":2000,"seed":20261002},
+  "anchor_scenario":{"mapping":"STD_0p1_0p9","canopy_offset_c":0.0,"forcing":"SNAPSHOT_T0"},
+  "frozen_models":{"M1":"2d3febb1ea002b24b452e32293e990beb78d3ce1","M2":"bea8c3b0a1324162a4b5487db578aa674c8b587c"},
+  "exp2_1c_anchor_response_sha256":{"M1":"00dd955cfe1fb7207707675a32c6dadbb0fa26e9995567c4c923538f7c49da31","M2":"b73ff889687823b36dd7ab37e58e8c06ed7bc5ada4bca4f15b6d5433c011fa82"}
+}
