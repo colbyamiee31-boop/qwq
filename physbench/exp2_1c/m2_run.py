@@ -19,6 +19,7 @@ def const(v):
 def run_arm(r,vent):
     p=example.parameters()
     p['outdoorDataFileURL']=str(CSG/'data/example_data.xls')
+    p['UFileURL']=str(CSG/'data/example_u.xls')
     p['StartTime']='2017-09-01T00:00'; p['EndTime']='2017-09-01T03:00'
     p['dtsim']=900; p['dt']=30
     p['ctl_vent_type']='timebasedControl'; p['ctl_blank_type']='timebasedControl'
