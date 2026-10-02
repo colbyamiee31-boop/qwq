@@ -1,0 +1,105 @@
+name: PhysBench EXP3.1 Decision Consequence
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [exp3-1-decision-consequence]
+
+permissions:
+  contents: read
+
+jobs:
+  protocol-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run protocol tests
+        run: python physbench/exp3_1/test_protocol.py -v
+
+  m1:
+    needs: protocol-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install frozen M1
+        run: |
+          set -euxo pipefail
+          git clone --no-tags https://github.com/BartvLaatum/GreenLight-Gym2.git GreenLight-Gym2
+          git -C GreenLight-Gym2 checkout --detach 2d3febb1ea002b24b452e32293e990beb78d3ce1
+          python -m pip install --upgrade pip
+          python -m pip install -r physbench/exp3_1/requirements-m1.txt ./GreenLight-Gym2
+      - name: Run M1 action grid
+        run: |
+          set -euxo pipefail
+          python physbench/exp3_1/m1_action_grid.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exp3-1-m1
+          path: evidence/M1/
+          retention-days: 90
+          if-no-files-found: error
+
+  m2:
+    needs: protocol-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install frozen M2
+        run: |
+          set -euxo pipefail
+          git clone --no-tags https://github.com/jdsjxin/CSGtom.git CSGtom
+          git -C CSGtom checkout --detach bea8c3b0a1324162a4b5487db578aa674c8b587c
+          python -m pip install --upgrade pip
+          python -m pip install -r physbench/exp3_1/requirements-m2.txt
+      - name: Run M2 action grid
+        run: |
+          set -euxo pipefail
+          python physbench/exp3_1/m2_action_grid.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exp3-1-m2
+          path: evidence/M2/
+          retention-days: 90
+          if-no-files-found: error
+
+  aggregate:
+    needs: [m1,m2]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install pandas==2.2.3 numpy==1.26.4
+      - uses: actions/download-artifact@v4
+        with:
+          name: exp3-1-m1
+          path: evidence/M1
+      - uses: actions/download-artifact@v4
+        with:
+          name: exp3-1-m2
+          path: evidence/M2
+      - name: Aggregate exact decision partitions and fail closed
+        run: |
+          set -euxo pipefail
+          python physbench/exp3_1/decision_analysis.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exp3-1-final
+          path: |
+            evidence/
+            physbench/exp3_1/
+          retention-days: 90
+          if-no-files-found: error
