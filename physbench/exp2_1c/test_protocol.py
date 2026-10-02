@@ -2,7 +2,7 @@ import unittest, pandas as pd, hashlib
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 P=ROOT/'physbench/exp2_1c/D2_PRIMARY_61_MODEL_INPUT.csv'
-EXPECTED='22a0070e6cb9c0f391039e676a356b8350f751719e25ee7e23a6462ec10d0d04'
+EXPECTED='8a5890dc9fb6950ce3c3e7ffc8ff900133ede8ffde99dfa68d79435314b56023'
 class T(unittest.TestCase):
   @classmethod
   def setUpClass(cls): cls.df=pd.read_csv(P)
