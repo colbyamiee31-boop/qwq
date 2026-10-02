@@ -16,12 +16,13 @@ SEED=20261002; B=2000
 rng=np.random.default_rng(SEED)
 
 def cluster_boot(df, value_fn):
-    dates=np.array(sorted(df.event_date.astype(str).unique())); vals=[]
+    date_key=df.event_date.astype(str)
+    dates=np.array(sorted(date_key.unique())); vals=[]
+    groups={dt:df.loc[date_key.eq(dt)].copy() for dt in dates}
     for _ in range(B):
-        samp=rng.choice(dates,size=len(dates),replace=True); parts=[]
-        for i,dt in enumerate(samp):
-            g=df[df.event_date.astype(str).eq(dt)].copy(); g['_cluster_copy']=i; parts.append(g)
-        b=pd.concat(parts,ignore_index=True); v=value_fn(b)
+        samp=rng.choice(dates,size=len(dates),replace=True)
+        b=pd.concat([groups[dt] for dt in samp],ignore_index=True)
+        v=value_fn(b)
         if np.isfinite(v): vals.append(float(v))
     if not vals: return [None,None]
     return [float(np.quantile(vals,0.025)),float(np.quantile(vals,0.975))]
