@@ -36,7 +36,7 @@ def run_arm(r,vent):
     st=_dt.datetime(2017,int(r.month),int(r.day),hh,mm); en=st+_dt.timedelta(minutes=30)
     model.p['StartTime']=st.strftime('%Y-%m-%dT%H:%M'); model.p['EndTime']=en.strftime('%Y-%m-%dT%H:%M')
     model.D=csg_shape.csg_shape(model.p)
-    model.d={'f_Rad':const(r.event_Iglob),'f_Tem':const(r.event_Tout),'f_RH':const(float(r.out_rh_pct_derived)/100.0),'f_CO2':const(r.outdoor_co2_ppm_fixed),'f_Wind':const(r.event_Windsp),'f_Tsky':const(r.sky_temperature_c_proxy)}
+    model.d={'f_Rad':const(r.event_Iglob),'f_Tem':const(r.event_Tout),'f_RH':const(float(r.out_vp_pa)/float(sat_vp_pa(float(r.event_Tout)))),'f_CO2':const(r.outdoor_co2_ppm_fixed),'f_Wind':const(r.event_Windsp),'f_Tsky':const(r.sky_temperature_c_proxy)}
     model.U={'u_blanket':lambda t:0.0,'u_vent':lambda t,v=vent:v,'u_venttop':lambda t:1.0,'u_ventside':lambda t:0.0,'u_venttopbot':lambda t:0.0}
     rec=[]; orig=csg_fun.ctl_csg1
     def logged(p_,D,d,Tair,t,U):
