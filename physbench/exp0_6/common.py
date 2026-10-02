@@ -34,6 +34,10 @@ def mg_m3_to_ppm(t,mg):
 def rh_from_t_vp(t,vp):
     return np.clip(100*np.asarray(vp)/sat_vp_pa(t),0,100)
 
+def ah_g_m3_from_vp_pa(t,vp):
+    # Absolute humidity [g m^-3] from vapour pressure in Pa.
+    return 2.167*np.asarray(vp,dtype=float)/(np.asarray(t,dtype=float)+273.15)
+
 def dedup_roots(roots,tol):
     good=[r for r in roots if np.isfinite(r['root_ppm'])]
     good.sort(key=lambda r:r['root_ppm'])
