@@ -38,7 +38,7 @@ The canopy equality is an explicit neutral closure for an unobserved state, not 
 To avoid future-information leakage, each 30-min LOW/HIGH pair uses constant pre-event forcing only:
 - global radiation = pre-event Iglob;
 - outdoor temperature = pre-event Tout;
-- outdoor vapor pressure/RH = deterministic conversion of outdoor absolute humidity and Tout;
+- outdoor vapor pressure = deterministic conversion of outdoor absolute humidity and Tout; M2 receives the algebraically equivalent RH fraction without clipping so that M1 and M2 share the same vapor-pressure forcing coordinate;
 - wind = pre-event Windsp in the provider-reported unit;
 - outdoor CO2 = fixed 415 ppm because D2 lacks synchronized outdoor CO2;
 - sky-temperature proxy = outdoor temperature;
