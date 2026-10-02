@@ -143,7 +143,7 @@ def run_arm(latent,c0,vent):
         raise RuntimeError('non-finite M1 intervention state')
     T=float(xf[2]); VP=float(xf[15])
     return {
-      'T':T,'VP':VP,'AH':float(216.7*VP/(T+273.15)),
+      'T':T,'VP':VP,'AH':float(ah_g_m3_from_vp_pa(T,VP)),
       'CO2':float(mg_m3_to_ppm(T,xf[0]))
     }
 
