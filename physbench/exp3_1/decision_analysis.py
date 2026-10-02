@@ -20,12 +20,30 @@ assert s1['actions']==s2['actions']==ACTIONS.tolist()
 assert s1['input_sha256']==s2['input_sha256']
 assert set(m1.event_id)==set(m2.event_id) and len(set(m1.event_id))==61
 
+# Fail closed on the frozen EXP3.1 action-grid schema before any decision analysis.
+_REQUIRED_COLUMNS={
+    'event_id','team','event_date','daynight','horizon_min','action',
+    'T_gradient_C','AH_gradient_g_m3','T','AH'
+}
+for _name,_df in (('M1',m1),('M2',m2)):
+    _missing=sorted(_REQUIRED_COLUMNS-set(_df.columns))
+    assert not _missing, f'{_name} missing required columns: {_missing}'
+    assert set(_df.horizon_min.to_numpy(int))=={15,30}, f'{_name} unexpected horizons'
+    assert not _df.duplicated(['event_id','horizon_min','action']).any(), f'{_name} duplicate event/horizon/action rows'
+    _counts=_df.groupby(['event_id','horizon_min']).size().to_numpy(int)
+    assert len(_counts)==61*2 and np.all(_counts==len(ACTIONS)), f'{_name} incomplete action grid'
+    for _col in ('action','T_gradient_C','AH_gradient_g_m3','T','AH'):
+        _v=pd.to_numeric(_df[_col],errors='raise').to_numpy(float)
+        assert np.all(np.isfinite(_v)), f'{_name} non-finite values in {_col}'
+
 def benefit_table(df,event_id,horizon):
     x=df[(df.event_id==event_id)&(df.horizon_min==horizon)].sort_values('action')
-    assert np.allclose(x.action.to_numpy(float),ACTIONS,rtol=0,atol=1e-12)
-    gt=float(x.T_gradient_C.iloc[0]); ga=float(x.AH_gradient_g_m3.iloc[0])
+    assert len(x)==len(ACTIONS)
+    assert np.allclose(x['action'].to_numpy(float),ACTIONS,rtol=0,atol=1e-12)
+    gt=float(x['T_gradient_C'].iloc[0]); ga=float(x['AH_gradient_g_m3'].iloc[0])
     assert abs(gt)>0 and abs(ga)>0
-    T=x.T.to_numpy(float); AH=x.AH.to_numpy(float)
+    # Explicit bracket access is required here: DataFrame.T means transpose, not the "T" column.
+    T=x['T'].to_numpy(float); AH=x['AH'].to_numpy(float)
     bT=-np.sign(gt)*(T-T[0])/abs(gt)
     bA=-np.sign(ga)*(AH-AH[0])/abs(ga)
     B=0.5*(bT+bA)
