@@ -1,0 +1,8 @@
+{
+  "source": "D2 AGC2019 Version 2 raw/extracted/Weather/Weather.csv",
+  "weather_csv_sha256": "a9d7446a17496cf9c018b8b8aa40424c54a2d224ae72952923f0256cad0f1e55",
+  "rows_used": 244,
+  "events": 61,
+  "lags_min": [-15,-10,-5,0],
+  "post_event_weather_used": false
+}
