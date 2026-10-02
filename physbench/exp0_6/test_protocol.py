@@ -7,6 +7,7 @@ HERE=Path(__file__).resolve().parent
 ROOT=HERE.parents[1]
 sys.path.insert(0,str(HERE))
 from generate_prehistory import generate_prehistory
+from common import ah_g_m3_from_vp_pa
 
 CFG=json.loads((HERE/'latent_history_config.json').read_text())
 
@@ -85,6 +86,12 @@ class TestFrozenLatentHistoryProtocol(unittest.TestCase):
         self.assertEqual(sha256(p),'8a5890dc9fb6950ce3c3e7ffc8ff900133ede8ffde99dfa68d79435314b56023')
         df=pd.read_csv(p)
         self.assertEqual(df.event_id.nunique(),61)
+
+    def test_absolute_humidity_units(self):
+        # At ~20 C and 1684 Pa, AH should be ~12.5 g m^-3, not ~1250.
+        ah=float(ah_g_m3_from_vp_pa(20.0,1684.323516865))
+        self.assertGreater(ah,12.0)
+        self.assertLess(ah,13.0)
 
     def test_action_and_root_definitions(self):
         self.assertEqual(CFG['action_grid'],[0.1,0.3,0.5,0.7,0.9])
