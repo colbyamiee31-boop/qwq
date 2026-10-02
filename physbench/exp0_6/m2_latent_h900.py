@@ -155,7 +155,7 @@ def run_arm(latent,c0,vent):
     err=float(np.max(np.abs(np.asarray(rec,dtype=float)-vent))) if rec else float('inf')
     if err!=0.0: raise RuntimeError(f'M2 action application error {err}')
     T=float(xf[SV.index('T_air')]); VP=float(xf[SV.index('VP')])
-    return {'T':T,'VP':VP,'AH':float(216.7*VP/(T+273.15)),'CO2':float(xf[SV.index('CO2')])}
+    return {'T':T,'VP':VP,'AH':float(ah_g_m3_from_vp_pa(T,VP)),'CO2':float(xf[SV.index('CO2')])}
 
 def response(latent,c0):
     lo=run_arm(latent,c0,LOW); hi=run_arm(latent,c0,HIGH)
