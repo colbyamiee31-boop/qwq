@@ -159,7 +159,7 @@ def bracket(event_id,horizon,coordinate,target):
 def solve(row):
     eid=int(row.event_id); h=int(row.horizon_min); coord=str(row.coordinate); target=float(row.target_dose)
     width=float(row.common_width)
-    tol=max(1e-8,1e-6*max(1.0,abs(target)),1e-4*abs(width))
+    tol=max(1e-8,1e-6*max(1.0,abs(target)),2e-4*abs(width))
     ulo,uhi,dlo,dhi=bracket(eid,h,coord,target)
     r=EVENT_MAP[eid]
     initial_ulo,initial_uhi=ulo,uhi
