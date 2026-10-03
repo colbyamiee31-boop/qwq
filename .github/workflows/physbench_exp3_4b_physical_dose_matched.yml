@@ -1,0 +1,183 @@
+name: PhysBench EXP3.4B Physical-Dose-Matched Decision Consequence
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [exp3-4b-physical-dose-matched]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  protocol-and-syntax:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify frozen protocol and implementation fingerprints
+        run: |
+          set -euxo pipefail
+          echo 'fe576716c83818973092de02fe251ac8da9af341c874e76c25b981926493b70e  physbench/exp3_4b/PROTOCOL.md' | sha256sum -c -
+          echo 'f57abbd9f36152cc30f78164d132b45134626dcde0bfcb00c7dff677034b7e04  physbench/exp3_4b/common.py' | sha256sum -c -
+          echo '951efcb6c15a8040579f5a679cc23cd6a3a81e094a17f6cc2527fdd7f9cbba96  physbench/exp3_4b/test_protocol.py' | sha256sum -c -
+          echo '24dde2ae31fa51496c95aed742b862924cc99b8d998a55aadcef186dd8b33c8a  physbench/exp3_4b/m1_matched_dose.py' | sha256sum -c -
+          echo '884c51ab81cf546e5b4b3679ae99b25a64f71013892031e7e6b2a26d41df723a  physbench/exp3_4b/m2_matched_dose.py' | sha256sum -c -
+          echo 'fabce7b661d1fa54bacbfd65ba9c2515f73e068eb2ede3fe2e6962cb21571719  physbench/exp3_4b/aggregate_exp3_4b.py' | sha256sum -c -
+          sha256sum physbench/exp3_4b/PROTOCOL.md physbench/exp3_4b/common.py physbench/exp3_4b/test_protocol.py > EXP3_4B_PROTOCOL_FREEZE_SHA256.txt
+      - name: Install lightweight dependencies
+        run: python -m pip install numpy==1.26.4 pandas==2.2.3
+      - name: Run protocol tests and compile
+        run: |
+          set -euxo pipefail
+          python physbench/exp3_4b/test_protocol.py -v
+          python -m py_compile physbench/exp3_4b/common.py physbench/exp3_4b/m1_matched_dose.py physbench/exp3_4b/m2_matched_dose.py physbench/exp3_4b/aggregate_exp3_4b.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exp3-4b-protocol-freeze
+          path: |
+            EXP3_4B_PROTOCOL_FREEZE_SHA256.txt
+            physbench/exp3_4b/
+          retention-days: 90
+          if-no-files-found: error
+
+  m1:
+    needs: protocol-and-syntax
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install frozen M1
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r physbench/exp3_1/requirements-m1.txt
+          python -m pip install 'git+https://github.com/BartvLaatum/GreenLight-Gym2.git@2d3febb1ea002b24b452e32293e990beb78d3ce1'
+          python -m pip freeze | sort > EXP3_4B_M1_PIP_FREEZE.txt
+      - name: Download locked EXP3.4A final evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: exp3-4a-final
+          path: _exp34a
+          github-token: ${{ github.token }}
+          repository: colbyamiee31-boop/qwq
+          run-id: 37095887502
+      - name: Stage and verify locked inputs
+        run: |
+          set -euxo pipefail
+          mkdir -p evidence/EXP3_4A_FINAL evidence/EXP3_4A_M1
+          cp _exp34a/evidence/EXP3_4A_FINAL/common_physical_dose_targets_for_EXP3_4B.csv evidence/EXP3_4A_FINAL/
+          cp _exp34a/evidence/EXP3_4A_M1/physical_dose_grid.csv evidence/EXP3_4A_M1/
+          cp _exp34a/evidence/EXP3_4A_M1/summary.json evidence/EXP3_4A_M1/
+          echo 'e07e64d8f8f7ac914a68b5cda73e0a76f5b9bd890a81473a42dd8ee8f6656292  evidence/EXP3_4A_FINAL/common_physical_dose_targets_for_EXP3_4B.csv' | sha256sum -c -
+          echo '8a5890dc9fb6950ce3c3e7ffc8ff900133ede8ffde99dfa68d79435314b56023  physbench/exp2_1c/D2_PRIMARY_61_MODEL_INPUT.csv' | sha256sum -c -
+      - name: Execute M1 physical-dose inversion and actual outcomes
+        run: python physbench/exp3_4b/m1_matched_dose.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: exp3-4b-m1
+          path: |
+            evidence/EXP3_4B_M1/
+            EXP3_4B_M1_PIP_FREEZE.txt
+            physbench/exp3_4b/
+          retention-days: 90
+          if-no-files-found: error
+
+  m2:
+    needs: protocol-and-syntax
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install frozen M2
+        run: |
+          set -euxo pipefail
+          git clone --no-tags https://github.com/jdsjxin/CSGtom.git CSGtom
+          git -C CSGtom checkout --detach bea8c3b0a1324162a4b5487db578aa674c8b587c
+          test "$(git -C CSGtom rev-parse HEAD)" = 'bea8c3b0a1324162a4b5487db578aa674c8b587c'
+          python -m pip install --upgrade pip
+          python -m pip install -r physbench/exp3_1/requirements-m2.txt
+          python -m pip freeze | sort > EXP3_4B_M2_PIP_FREEZE.txt
+      - name: Download locked EXP3.4A final evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: exp3-4a-final
+          path: _exp34a
+          github-token: ${{ github.token }}
+          repository: colbyamiee31-boop/qwq
+          run-id: 37095887502
+      - name: Stage and verify locked inputs
+        run: |
+          set -euxo pipefail
+          mkdir -p evidence/EXP3_4A_FINAL evidence/EXP3_4A_M2
+          cp _exp34a/evidence/EXP3_4A_FINAL/common_physical_dose_targets_for_EXP3_4B.csv evidence/EXP3_4A_FINAL/
+          cp _exp34a/evidence/EXP3_4A_M2/physical_dose_grid.csv evidence/EXP3_4A_M2/
+          cp _exp34a/evidence/EXP3_4A_M2/summary.json evidence/EXP3_4A_M2/
+          echo 'e07e64d8f8f7ac914a68b5cda73e0a76f5b9bd890a81473a42dd8ee8f6656292  evidence/EXP3_4A_FINAL/common_physical_dose_targets_for_EXP3_4B.csv' | sha256sum -c -
+          echo '8a5890dc9fb6950ce3c3e7ffc8ff900133ede8ffde99dfa68d79435314b56023  physbench/exp2_1c/D2_PRIMARY_61_MODEL_INPUT.csv' | sha256sum -c -
+      - name: Execute M2 physical-dose inversion and actual outcomes
+        run: python physbench/exp3_4b/m2_matched_dose.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: exp3-4b-m2
+          path: |
+            evidence/EXP3_4B_M2/
+            EXP3_4B_M2_PIP_FREEZE.txt
+            physbench/exp3_4b/
+          retention-days: 90
+          if-no-files-found: error
+
+  aggregate:
+    needs: [m1, m2]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy==1.26.4 pandas==2.2.3
+      - uses: actions/download-artifact@v4
+        with:
+          name: exp3-4b-m1
+          path: _m1
+      - uses: actions/download-artifact@v4
+        with:
+          name: exp3-4b-m2
+          path: _m2
+      - name: Download locked EXP3.1 final evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: exp3-1-final
+          path: _exp31
+          github-token: ${{ github.token }}
+          repository: colbyamiee31-boop/qwq
+          run-id: 37024060571
+      - name: Stage evidence and aggregate
+        run: |
+          set -euxo pipefail
+          mkdir -p evidence/EXP3_4B_M1 evidence/EXP3_4B_M2 evidence/EXP3_1_LOCKED
+          cp -a _m1/evidence/EXP3_4B_M1/. evidence/EXP3_4B_M1/
+          cp -a _m2/evidence/EXP3_4B_M2/. evidence/EXP3_4B_M2/
+          cp _exp31/evidence/FINAL/event_decision_consequence.csv evidence/EXP3_1_LOCKED/
+          python physbench/exp3_4b/aggregate_exp3_4b.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exp3-4b-final
+          path: |
+            evidence/EXP3_4B_M1/
+            evidence/EXP3_4B_M2/
+            evidence/EXP3_4B_FINAL/
+            physbench/exp3_4b/
+          retention-days: 90
+          if-no-files-found: error
