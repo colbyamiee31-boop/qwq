@@ -36,10 +36,13 @@ Correction:
 safeguarded bisection with monotone bracket updates.
 
 Stopping:
-precision-aware target-dose tolerance from PROTOCOL.md and `EXP3_4B_NUMERICAL_MATCH_AMENDMENT.md`, maximum 30 iterations.
+precision-aware target-dose tolerance from PROTOCOL.md and `EXP3_4B_NUMERICAL_MATCH_AMENDMENT_2.md`, maximum 30 iterations.
 The best evaluated command by absolute target-dose residual is retained.
 
 If the initial interpolation already satisfies the tolerance, no additional root iterations are required.
+
+M1 representable-command fallback:
+`EXP3_4B_NUMERICAL_MATCH_AMENDMENT_3.md` permits a fallback only after the 30-iteration continuous solver fails, only when the final lower/upper commands are adjacent float32 values and their explicitly re-evaluated physical doses bracket the target. The nearer endpoint is accepted only within half of that local physical-dose quantization gap plus the frozen numerical epsilon. No global tolerance is enlarged.
 
 ## Decision action
 
@@ -54,7 +57,7 @@ Native command is an implementation variable only and is never used in EXP3.4B d
 ## Reproducibility
 
 Every model output row stores target dose, achieved dose, solved native command, bracket endpoints, dose error,
-iteration count, T and AH.
+nominal tolerance, effective acceptance tolerance, acceptance mode, any local quantization gap, iteration count, T and AH.
 
 Aggregate must independently verify five complete q rows per eligible model/event/horizon/coordinate cell before
 decision analysis.

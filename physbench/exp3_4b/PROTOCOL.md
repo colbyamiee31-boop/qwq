@@ -103,13 +103,24 @@ Dose-match tolerance for coordinate x:
 
 `tol_match = max(1e-8, 1e-6 * max(1, |D_target|), 2e-4 * |H-L|)`.
 
-This precision-aware rule is finalized by `EXP3_4B_NUMERICAL_MATCH_AMENDMENT_2.md` before any aggregate decision result.
+This precision-aware continuous-root rule is finalized by `EXP3_4B_NUMERICAL_MATCH_AMENDMENT_2.md`.
 
-A target is accepted only when:
+The final representable-command fallback is frozen in
+`EXP3_4B_NUMERICAL_MATCH_AMENDMENT_3.md` before any aggregate decision result. It may be used only after 30
+bisection iterations, only when the final M1 command endpoints are adjacent `float32` values, and only when their
+explicitly re-evaluated achieved doses bracket the target. The nearer endpoint is accepted only if
 
-`|D_achieved - D_target| <= tol`.
+`|D_achieved-D_target| <= 0.5*|D_hi-D_lo| + eps_q`,
 
-Also report the cross-model achieved-dose difference at every q.
+with
+
+`eps_q = 1e-10 * max(1, |D_target|, |D_lo|, |D_hi|)`.
+
+Thus a target is accepted either by the Amendment-2 continuous tolerance or by this strictly local
+nearest-representable-value rule. No global tolerance is enlarged.
+
+Also report the acceptance mode, nominal tolerance, local quantization gap when applicable, and the cross-model
+achieved-dose difference at every q.
 
 No isotonic regression, smoothing, re-calibration, or post-hoc target adjustment is permitted.
 
@@ -238,7 +249,7 @@ Fail if:
 - a solved command leaves [0.1,0.9];
 - requested/applied native command differs;
 - any model state/output/dose is non-finite;
-- any accepted target exceeds the predeclared dose-match tolerance;
+- any accepted target exceeds its predeclared row-specific acceptance rule (continuous tolerance or the strict adjacent-representable fallback);
 - a cell has fewer or more than five q targets;
 - decision partition does not cover its full lambda domain within 1e-12.
 

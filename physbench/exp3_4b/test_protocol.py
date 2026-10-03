@@ -31,9 +31,12 @@ class TestEXP34BProtocol(unittest.TestCase):
         self.assertIn("gap+=width*abs(Q[i1]-Q[i2])",a)
 
     def test_numerical_amendment_is_frozen(self):
-        a=(HERE/'EXP3_4B_NUMERICAL_MATCH_AMENDMENT_2.md').read_text()
-        self.assertIn('2e-4 * |H-L|',a)
-        self.assertIn('before any EXP3.4B aggregate decision result',a)
+        a2=(HERE/'EXP3_4B_NUMERICAL_MATCH_AMENDMENT_2.md').read_text()
+        a3=(HERE/'EXP3_4B_NUMERICAL_MATCH_AMENDMENT_3.md').read_text()
+        self.assertIn('2e-4 * |H-L|',a2)
+        self.assertIn('before any EXP3.4B aggregate decision result',a3)
+        self.assertIn('adjacent `float32` values',a3)
+        self.assertIn('0.5*|D_hi-D_lo| + eps_q',a3)
 
     def test_matching_is_bounded_and_fail_closed(self):
         for name in ['m1_matched_dose.py','m2_matched_dose.py']:
@@ -42,7 +45,18 @@ class TestEXP34BProtocol(unittest.TestCase):
             self.assertIn("tol=max(1e-8,1e-6*max(1.0,abs(target)),2e-4*abs(width))",s)
             self.assertIn("best_res",s)
             self.assertIn('command out of domain',s)
-            self.assertIn('dose tolerance fail',s)
+            if name=='m1_matched_dose.py':
+                self.assertIn("np.nextafter(lo32,np.float32(np.inf),dtype=np.float32)",s)
+                self.assertIn("float32_nearest_representable",s)
+                self.assertIn("quantization_acceptance_bound",s)
+            else:
+                self.assertIn('dose tolerance fail',s)
+
+    def test_aggregate_uses_effective_acceptance_tolerance(self):
+        a=(HERE/'decision_analysis.py').read_text()
+        self.assertIn("acceptance_tolerance",a)
+        self.assertIn("float32_nearest_representable",a)
+        self.assertIn("combined_tolerance",a)
 
 if __name__=='__main__':
     unittest.main()

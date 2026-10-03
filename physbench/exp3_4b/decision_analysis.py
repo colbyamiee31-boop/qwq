@@ -22,6 +22,17 @@ METRICS=[
 
 m1=pd.read_csv(M1DIR/'matched_dose_responses.csv')
 m2=pd.read_csv(M2DIR/'matched_dose_responses.csv')
+for df in (m1,m2):
+    if 'acceptance_tolerance' not in df.columns:
+        df['acceptance_tolerance']=df['dose_tolerance']
+    if 'acceptance_mode' not in df.columns:
+        df['acceptance_mode']='continuous_tolerance'
+    if 'quantization_command_gap' not in df.columns:
+        df['quantization_command_gap']=0.0
+    if 'quantization_dose_gap' not in df.columns:
+        df['quantization_dose_gap']=0.0
+    if 'quantization_acceptance_bound' not in df.columns:
+        df['quantization_acceptance_bound']=0.0
 s1=json.loads((M1DIR/'summary.json').read_text())
 s2=json.loads((M2DIR/'summary.json').read_text())
 old=pd.read_csv(OLD/'event_decision_consequence.csv')
@@ -36,7 +47,14 @@ for name,df in [('M1',m1),('M2',m2)]:
     assert not df.duplicated(['event_id','horizon_min','coordinate','q']).any()
     assert df.groupby(['event_id','horizon_min','coordinate']).size().eq(5).all()
     assert np.isfinite(df.select_dtypes(include=[np.number]).to_numpy()).all()
-    assert np.all(np.abs(df.dose_error.to_numpy(float))<=df.dose_tolerance.to_numpy(float)+1e-15)
+    assert np.all(np.abs(df.dose_error.to_numpy(float))<=df.acceptance_tolerance.to_numpy(float)+1e-15)
+    assert set(df.acceptance_mode.unique()).issubset({'continuous_tolerance','float32_nearest_representable'})
+    qmask=df.acceptance_mode.eq('float32_nearest_representable')
+    if qmask.any():
+        assert name=='M1'
+        assert np.all(df.loc[qmask,'quantization_command_gap'].to_numpy(float)>0)
+        assert np.all(df.loc[qmask,'quantization_dose_gap'].to_numpy(float)>0)
+        assert np.all(np.abs(df.loc[qmask,'dose_error'].to_numpy(float))<=df.loc[qmask,'quantization_acceptance_bound'].to_numpy(float)+1e-15)
     assert np.all((df.native_command>=0.1-1e-8)&(df.native_command<=0.9+1e-8))
 
 # Exact cohort gates.
@@ -55,7 +73,7 @@ match=m1.merge(
 )
 assert len(match)==1060
 match['cross_model_achieved_dose_abs_gap']=np.abs(match.achieved_dose_M1-match.achieved_dose_M2)
-match['combined_tolerance']=match.dose_tolerance_M1+match.dose_tolerance_M2
+match['combined_tolerance']=match.acceptance_tolerance_M1+match.acceptance_tolerance_M2
 match['cross_model_gap_fraction_of_combined_tol']=(
     match.cross_model_achieved_dose_abs_gap/match.combined_tolerance
 )
@@ -289,6 +307,7 @@ result={
     'max_cross_model_achieved_dose_gap':float(match.cross_model_achieved_dose_abs_gap.max()),
     'max_cross_model_gap_fraction_of_combined_tolerance':float(match.cross_model_gap_fraction_of_combined_tol.max()),
     'max_cross_model_gap_fraction_of_common_span':float(match.cross_model_gap_fraction_of_common_span.max()),
+    'M1_quantized_nearest_representable_rows':int((m1.acceptance_mode=='float32_nearest_representable').sum()),
     'M1_summary':s1,'M2_summary':s2
  }
 }

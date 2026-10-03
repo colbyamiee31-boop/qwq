@@ -163,6 +163,11 @@ def solve(row):
     ulo,uhi,dlo,dhi=bracket(eid,h,coord,target)
     r=EVENT_MAP[eid]
     initial_ulo,initial_uhi=ulo,uhi
+    acceptance_mode='continuous_tolerance'
+    acceptance_tol=float(tol)
+    quant_cmd_gap=0.0
+    quant_dose_gap=0.0
+    quant_accept_bound=0.0
     if ulo==uhi:
         res=evaluate(r,ulo,h); n_eval=1
     else:
@@ -192,17 +197,46 @@ def solve(row):
                     uhi,dhi=float(trial['native_command']),got
             res=best_res
             if best_abs>tol:
-                raise RuntimeError((eid,h,coord,float(row.q),'dose root did not converge',target,float(res[coord]),tol,ulo,uhi,best_abs))
+                lo32=np.float32(ulo); hi32=np.float32(uhi)
+                next_lo=np.nextafter(lo32,np.float32(np.inf),dtype=np.float32)
+                adjacent=bool(next_lo==hi32)
+                if not adjacent:
+                    raise RuntimeError((eid,h,coord,float(row.q),'dose root did not converge and float32 bracket not adjacent',
+                                        target,float(res[coord]),tol,ulo,uhi,best_abs))
+                lores=evaluate(r,float(lo32),h); hires=evaluate(r,float(hi32),h); n_eval+=2
+                lod=float(lores[coord]); hid=float(hires[coord])
+                qeps=1e-10*max(1.0,abs(target),abs(lod),abs(hid))
+                if not (min(lod,hid)-qeps <= target <= max(lod,hid)+qeps):
+                    raise RuntimeError((eid,h,coord,float(row.q),'adjacent float32 doses do not bracket target',
+                                        target,lod,hid,float(lo32),float(hi32),qeps))
+                quant_cmd_gap=float(abs(float(hi32)-float(lo32)))
+                quant_dose_gap=float(abs(hid-lod))
+                if quant_dose_gap<=0:
+                    raise RuntimeError((eid,h,coord,float(row.q),'zero physical-dose quantization gap',
+                                        target,lod,hid,float(lo32),float(hi32)))
+                res=min((lores,hires),key=lambda z:abs(float(z[coord])-target))
+                best_abs=abs(float(res[coord])-target)
+                quant_accept_bound=float(0.5*quant_dose_gap+qeps)
+                if best_abs>quant_accept_bound:
+                    raise RuntimeError((eid,h,coord,float(row.q),'nearest representable dose exceeds quantization bound',
+                                        target,float(res[coord]),best_abs,quant_accept_bound,quant_dose_gap))
+                acceptance_mode='float32_nearest_representable'
+                acceptance_tol=max(float(tol),quant_accept_bound)
     achieved=float(res[coord]); err=achieved-target
-    if abs(err)>tol:
-        raise RuntimeError((eid,h,coord,float(row.q),'dose tolerance fail',target,achieved,err,tol))
+    if abs(err)>acceptance_tol:
+        raise RuntimeError((eid,h,coord,float(row.q),'dose acceptance fail',target,achieved,err,
+                            tol,acceptance_tol,acceptance_mode))
     if not (0.1-1e-8 <= res['native_command'] <= 0.9+1e-8):
         raise RuntimeError((eid,h,coord,float(row.q),'command out of domain',res['native_command']))
     return {
       'model_id':'M1','event_id':eid,'team':row.team,'event_date':row.event_date,'daynight':row.daynight,
       'horizon_min':h,'coordinate':coord,'q':float(row.q),
       'target_dose':target,'achieved_dose':achieved,'dose_error':float(err),'dose_tolerance':float(tol),
-      'common_width':float(width),'dose_error_fraction_of_common_span':float(abs(err)/width),
+      'acceptance_tolerance':float(acceptance_tol),'acceptance_mode':acceptance_mode,
+      'quantization_command_gap':float(quant_cmd_gap),'quantization_dose_gap':float(quant_dose_gap),
+      'quantization_acceptance_bound':float(quant_accept_bound),
+      'dose_error_fraction_of_acceptance_tolerance':float(abs(err)/acceptance_tol),
+      'dose_error_fraction_of_common_span':float(abs(err)/width),
       'native_command':float(res['native_command']),
       'initial_bracket_u_lo':float(initial_ulo),'initial_bracket_u_hi':float(initial_uhi),
       'root_model_evaluations':int(n_eval),
@@ -226,7 +260,13 @@ assert np.isfinite(df.select_dtypes(include=[np.number]).to_numpy()).all()
 assert float(df.action_error.max())==0.0
 assert float(df.init_error.max())<=1e-8
 assert float(df.quadrature_state_error.max())<=1e-7
-assert np.all(np.abs(df.dose_error.to_numpy(float))<=df.dose_tolerance.to_numpy(float)+1e-15)
+assert np.all(np.abs(df.dose_error.to_numpy(float))<=df.acceptance_tolerance.to_numpy(float)+1e-15)
+qmask=df.acceptance_mode.eq('float32_nearest_representable')
+assert set(df.acceptance_mode.unique()).issubset({'continuous_tolerance','float32_nearest_representable'})
+if qmask.any():
+    assert np.all(df.loc[qmask,'quantization_command_gap'].to_numpy(float)>0)
+    assert np.all(df.loc[qmask,'quantization_dose_gap'].to_numpy(float)>0)
+    assert np.all(np.abs(df.loc[qmask,'dose_error'].to_numpy(float))<=df.loc[qmask,'quantization_acceptance_bound'].to_numpy(float)+1e-15)
 df.to_csv(OUT/'matched_dose_responses.csv',index=False,float_format='%.12g')
 
 counts=df.groupby(['coordinate','horizon_min']).size().to_dict()
@@ -236,8 +276,12 @@ summary={
  'rows':int(len(df)),
  'counts':{f'{k[0]}_{int(k[1])}':int(v) for k,v in counts.items()},
  'max_abs_dose_error':float(np.abs(df.dose_error).max()),
- 'max_dose_error_fraction_of_tolerance':float(np.max(np.abs(df.dose_error)/df.dose_tolerance)),
+ 'max_dose_error_fraction_of_nominal_tolerance':float(np.max(np.abs(df.dose_error)/df.dose_tolerance)),
+ 'max_dose_error_fraction_of_acceptance_tolerance':float(df.dose_error_fraction_of_acceptance_tolerance.max()),
  'max_dose_error_fraction_of_common_span':float(df.dose_error_fraction_of_common_span.max()),
+ 'quantized_nearest_representable_rows':int(qmask.sum()),
+ 'max_quantization_command_gap':float(df.quantization_command_gap.max()),
+ 'max_quantization_dose_gap':float(df.quantization_dose_gap.max()),
  'max_action_error':float(df.action_error.max()),
  'max_init_error':float(df.init_error.max()),
  'max_quadrature_state_error':float(df.quadrature_state_error.max()),
@@ -249,7 +293,7 @@ summary['gate_pass']=bool(
  and summary['rows']==1060
  and summary['counts']=={'DN_15':305,'DN_30':305,'DV_15':210,'DV_30':240}
  and summary['all_finite'] and summary['max_action_error']==0.0 and summary['max_init_error']<=1e-8
- and summary['max_quadrature_state_error']<=1e-7 and summary['max_dose_error_fraction_of_tolerance']<=1.0+1e-12
+ and summary['max_quadrature_state_error']<=1e-7 and summary['max_dose_error_fraction_of_acceptance_tolerance']<=1.0+1e-12
 )
 (OUT/'summary.json').write_text(json.dumps(summary,indent=2),encoding='utf-8')
 print(json.dumps(summary,indent=2))
