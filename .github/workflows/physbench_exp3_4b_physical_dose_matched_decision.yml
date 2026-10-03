@@ -2,8 +2,6 @@ name: PhysBench EXP3.4B Physical Dose Matched Decision
 
 on:
   workflow_dispatch:
-  push:
-    branches: [exp3-4b-physical-dose-matched-decision]
 
 permissions:
   actions: read
