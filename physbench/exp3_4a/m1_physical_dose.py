@@ -77,7 +77,7 @@ q_ext=a_sym[136]+a_sym[137]+a_sym[145]
 FQ900=ca.integrator(
     'EXP3_4A_M1_Q900','cvodes',
     {'x':x_sym,'u':u_sym,'p':ca.vertcat(d_sym,p_sym),'ode':dx_sym,'quad':q_ext},
-    0.0,900.0,{'abstol':1e-4,'reltol':1e-4,'max_num_steps':150000}
+    0.0,900.0,{'abstol':1e-4,'reltol':1e-4,'max_num_steps':70000}
 )
 
 H_EFF=float(P_NATIVE[49])
@@ -94,29 +94,58 @@ def initial_state(r):
     return x
 
 def one_event_action(r,u):
+    # Native EXP3.1 trajectory is retained exactly for scientific outcomes.
     d=build_weather(r)
     x0=initial_state(r)
-    a=full_action(float(u)).astype(float)
+    a=full_action(float(u))
 
-    r1=FQ900(x0=x0,u=a,p=np.concatenate([d[0],P_NATIVE]))
-    x1=np.asarray(r1['xf'].full()).reshape(-1)
-    q1=float(np.asarray(r1['qf'].full()).reshape(-1)[0])
+    env=gym.make('gl_gym/GreenLightTomato-v0',
+        controlled_inputs=['uBoil','uCO2','uThScr','uVent','uLamp','uBlScr'],
+        normalize_actions=False,parameter_provider='fixed')
+    env.reset(seed=3407,options={'scenario':{'location':'Amsterdam','growth_year':2010,'start_day':244}})
+    ee=env.unwrapped
+    ee.weather_data=d.copy()
+    ee.day_of_year=int(r.day_of_year)
+    ee.hour_of_day=float(r.hour_decimal)
+    ee.x=x0.copy(); ee.x_prev=x0.copy(); ee.obs=ee._get_obs()
 
-    r2=FQ900(x0=x1,u=a,p=np.concatenate([d[1],P_NATIVE]))
-    x2=np.asarray(r2['xf'].full()).reshape(-1)
-    q2=float(np.asarray(r2['qf'].full()).reshape(-1)[0])
+    native=[]; action_errs=[]; finite=True
+    for _ in range(2):
+        _,_,_,truncated,info=env.step(a)
+        if truncated:
+            raise RuntimeError((int(r.event_id),u,'M1 native trajectory truncated'))
+        applied=np.asarray(info['controls'],dtype=float)
+        action_errs.append(float(np.max(np.abs(applied-a))))
+        finite=finite and bool(np.all(np.isfinite(ee.x)))
+        native.append(ee.x.copy())
+    env.close()
+    x1_native,x2_native=native
 
-    if not (np.all(np.isfinite(x1)) and np.all(np.isfinite(x2)) and np.isfinite(q1) and np.isfinite(q2)):
+    # Read-only augmented quadrature for the physical ventilation dose.
+    # Each 900-s segment is re-anchored to the corresponding native state so
+    # quadrature integration cannot perturb the trajectory used for T/AH.
+    q1r=FQ900(x0=x0,u=a.astype(float),p=np.concatenate([d[0],P_NATIVE]))
+    x1q=np.asarray(q1r['xf'].full()).reshape(-1)
+    q1=float(np.asarray(q1r['qf'].full()).reshape(-1)[0])
+
+    q2r=FQ900(x0=x1_native,u=a.astype(float),p=np.concatenate([d[1],P_NATIVE]))
+    x2q=np.asarray(q2r['xf'].full()).reshape(-1)
+    q2=float(np.asarray(q2r['qf'].full()).reshape(-1)[0])
+
+    qerr1=float(np.max(np.abs(x1q-x1_native)))
+    qerr2=float(np.max(np.abs(x2q-x2_native)))
+    if not (finite and np.all(np.isfinite(x1q)) and np.all(np.isfinite(x2q)) and np.isfinite(q1) and np.isfinite(q2)):
         raise RuntimeError((int(r.event_id),u,'non-finite M1 dose trajectory'))
 
     init_err=max(
         abs(float(x0[2])-float(r.event_Tair)),
         abs(float(x0[15])-float(r.in_vp_pa)),
+        abs(float(mg_m3_to_ppm(x0[2],x0[0]))-float(r.CO2_pre_ppm)),
         abs(float(x0[4])-float(r.event_Tair))
     )
 
     out=[]
-    for h,xf,dose in [(15,x1,q1),(30,x2,q1+q2)]:
+    for h,xf,dose,qerr in [(15,x1_native,q1,qerr1),(30,x2_native,q1+q2,qerr2)]:
         T=float(xf[2]); VP=float(xf[15])
         DN=float(dose/H_EFF)
         out.append({
@@ -129,10 +158,10 @@ def one_event_action(r,u):
           'T':T,'AH':float(locked_exp31_ah(T,VP)),
           'T_gradient_C':float(r.T_gradient_C),'AH_gradient_g_m3':float(r.AH_gradient_g_m3),
           'init_max_abs_error':float(init_err),
-          'action_max_abs_error':0.0
+          'action_max_abs_error':float(max(action_errs)),
+          'quadrature_vs_native_state_max_abs_error':qerr
         })
     return out
-
 rows=[]
 for _,r in EVENTS.iterrows():
     for u in U9:
@@ -172,12 +201,14 @@ summary={
  'all_finite':bool(np.isfinite(df.select_dtypes(include=[np.number]).to_numpy()).all()),
  'max_init_error':float(df.init_max_abs_error.max()),
  'max_action_error':float(df.action_max_abs_error.max()),
- 'same_run_exp3_1_max_T_AH_error':max_recon
+ 'same_run_exp3_1_max_T_AH_error':max_recon,
+ 'max_quadrature_vs_native_state_error':float(df.quadrature_vs_native_state_max_abs_error.max())
 }
 summary['gate_pass']=bool(
  summary['input_sha256']==EXPECTED_INPUT_SHA and summary['events']==61 and summary['rows']==61*2*9
  and summary['all_finite'] and summary['max_init_error']<=1e-8 and summary['max_action_error']==0.0
  and summary['same_run_exp3_1_max_T_AH_error']<=1e-9
+ and summary['max_quadrature_vs_native_state_error']<=1e-7
 )
 (OUT/'summary.json').write_text(json.dumps(summary,indent=2),encoding='utf-8')
 print(json.dumps(summary,indent=2))
