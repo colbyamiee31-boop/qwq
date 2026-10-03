@@ -36,7 +36,8 @@ Correction:
 safeguarded bisection with monotone bracket updates.
 
 Stopping:
-predeclared target-dose tolerance from PROTOCOL.md, maximum 30 iterations.
+precision-aware target-dose tolerance from PROTOCOL.md and `EXP3_4B_NUMERICAL_MATCH_AMENDMENT.md`, maximum 30 iterations.
+The best evaluated command by absolute target-dose residual is retained.
 
 If the initial interpolation already satisfies the tolerance, no additional root iterations are required.
 
