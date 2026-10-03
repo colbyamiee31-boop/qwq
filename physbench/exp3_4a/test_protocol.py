@@ -19,7 +19,8 @@ class TestEXP34AProtocol(unittest.TestCase):
         txt=(HERE/'EXP3_4A_PHYSICAL_SOURCE_LOCK.md').read_text()
         for token in [
             'a[136] + a[137] + a[145]',
-            'ctl_csg1 return',
+            'functions/csg_fun.py::ctl_csg1',
+            'q_ext_M2 = Vent',
             'm3 m-2 s-1',
             'H_eff_M1 = p[49] = 6.2 m',
             'H_eff_M2 = D.Vair / D.area_floor'
