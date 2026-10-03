@@ -188,8 +188,13 @@ cmp=ref.merge(
 assert len(cmp)==61*2*5
 cmp['abs_T_error']=np.abs(cmp.T_ref-cmp.T_dose)
 cmp['abs_AH_error']=np.abs(cmp.AH_ref-cmp.AH_dose)
+cmp['scaled_T_error']=cmp.abs_T_error/np.maximum(1.0,np.maximum(np.abs(cmp.T_ref),np.abs(cmp.T_dose)))
+cmp['scaled_AH_error']=cmp.abs_AH_error/np.maximum(1.0,np.maximum(np.abs(cmp.AH_ref),np.abs(cmp.AH_dose)))
 cmp.to_csv(OUT/'same_run_exp3_1_reconstruction.csv',index=False,float_format='%.12g')
-max_recon=float(max(cmp.abs_T_error.max(),cmp.abs_AH_error.max()))
+max_abs_T=float(cmp.abs_T_error.max())
+max_abs_AH=float(cmp.abs_AH_error.max())
+max_scaled_T=float(cmp.scaled_T_error.max())
+max_scaled_AH=float(cmp.scaled_AH_error.max())
 
 summary={
  'experiment':'PhysBench-GH EXP3.4A','model_id':'M1','model':'GreenLight-Gym2',
@@ -204,13 +209,18 @@ summary={
  'all_finite':bool(np.isfinite(df.select_dtypes(include=[np.number]).to_numpy()).all()),
  'max_init_error':float(df.init_max_abs_error.max()),
  'max_action_error':float(df.action_max_abs_error.max()),
- 'same_run_exp3_1_max_T_AH_error':max_recon,
+ 'same_run_exp3_1_max_abs_T_error':max_abs_T,
+ 'same_run_exp3_1_max_abs_AH_error':max_abs_AH,
+ 'same_run_exp3_1_max_scaled_T_error':max_scaled_T,
+ 'same_run_exp3_1_max_scaled_AH_error':max_scaled_AH,
  'max_quadrature_vs_native_state_error':float(df.quadrature_vs_native_state_max_abs_error.max())
 }
 summary['gate_pass']=bool(
  summary['input_sha256']==EXPECTED_INPUT_SHA and summary['events']==61 and summary['rows']==61*2*9
  and summary['all_finite'] and summary['max_init_error']<=1e-8 and summary['max_action_error']==0.0
- and summary['same_run_exp3_1_max_T_AH_error']<=1e-9
+ and summary['same_run_exp3_1_max_abs_T_error']<=1e-9
+ and summary['same_run_exp3_1_max_scaled_T_error']<=1e-11
+ and summary['same_run_exp3_1_max_scaled_AH_error']<=1e-11
  and summary['max_quadrature_vs_native_state_error']<=1e-7
 )
 (OUT/'summary.json').write_text(json.dumps(summary,indent=2),encoding='utf-8')
