@@ -250,7 +250,6 @@ summary['gate_pass']=bool(
  and summary['counts']=={'DN_15':305,'DN_30':305,'DV_15':210,'DV_30':240}
  and summary['all_finite'] and summary['max_action_error']==0.0 and summary['max_init_error']<=1e-8
  and summary['max_quadrature_state_error']<=1e-7 and summary['max_dose_error_fraction_of_tolerance']<=1.0+1e-12
- and summary['max_dose_error_fraction_of_common_span']<=1e-4+1e-12
 )
 (OUT/'summary.json').write_text(json.dumps(summary,indent=2),encoding='utf-8')
 print(json.dumps(summary,indent=2))

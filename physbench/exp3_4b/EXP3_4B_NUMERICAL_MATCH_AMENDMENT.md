@@ -25,10 +25,9 @@ For each frozen target:
 
 `tol_match = max(1e-8, 1e-6 * max(1, |D_target|), 1e-4 * |H-L|)`.
 
-Thus the numerical matching floor is at most **0.01% of the event-specific common physical-dose span**.
+Thus the tolerance includes a common-span numerical floor equal to **0.01% of the event-specific common physical-dose span**. Because the rule is a maximum of three terms, the pre-existing target-magnitude term can be larger than this floor for narrow common intervals.
 
-The five decision levels remain spaced by 25% of that span, so this floor is at most 1/2500 of an adjacent
-decision-level spacing.
+The five decision levels remain spaced by 25% of that span, so the common-span floor itself is 1/2500 of an adjacent decision-level spacing. The achieved residual/common-span ratio is reported for every accepted row rather than promoted to an additional unregistered hard gate.
 
 ## Solver rule
 

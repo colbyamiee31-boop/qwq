@@ -65,7 +65,6 @@ match['cross_model_gap_fraction_of_common_span']=(
     match.cross_model_achieved_dose_abs_gap/match.common_width
 )
 assert np.all(match.cross_model_achieved_dose_abs_gap<=match.combined_tolerance+1e-15)
-assert np.all(match.cross_model_gap_fraction_of_common_span<=2e-4+1e-12)
 match.to_csv(OUT/'matched_dose_cross_model_audit.csv',index=False,float_format='%.12g')
 
 def benefit_table(df,event_id,horizon,coordinate):
