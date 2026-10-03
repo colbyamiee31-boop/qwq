@@ -59,7 +59,13 @@ match['combined_tolerance']=match.dose_tolerance_M1+match.dose_tolerance_M2
 match['cross_model_gap_fraction_of_combined_tol']=(
     match.cross_model_achieved_dose_abs_gap/match.combined_tolerance
 )
+assert np.allclose(match.common_width_M1,match.common_width_M2,rtol=0,atol=1e-12)
+match['common_width']=match.common_width_M1
+match['cross_model_gap_fraction_of_common_span']=(
+    match.cross_model_achieved_dose_abs_gap/match.common_width
+)
 assert np.all(match.cross_model_achieved_dose_abs_gap<=match.combined_tolerance+1e-15)
+assert np.all(match.cross_model_gap_fraction_of_common_span<=2e-4+1e-12)
 match.to_csv(OUT/'matched_dose_cross_model_audit.csv',index=False,float_format='%.12g')
 
 def benefit_table(df,event_id,horizon,coordinate):
@@ -283,6 +289,7 @@ result={
     'rows_per_model':1060,
     'max_cross_model_achieved_dose_gap':float(match.cross_model_achieved_dose_abs_gap.max()),
     'max_cross_model_gap_fraction_of_combined_tolerance':float(match.cross_model_gap_fraction_of_combined_tol.max()),
+    'max_cross_model_gap_fraction_of_common_span':float(match.cross_model_gap_fraction_of_common_span.max()),
     'M1_summary':s1,'M2_summary':s2
  }
 }
