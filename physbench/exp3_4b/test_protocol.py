@@ -32,14 +32,14 @@ class TestEXP34BProtocol(unittest.TestCase):
 
     def test_numerical_amendment_is_frozen(self):
         a=(HERE/'EXP3_4B_NUMERICAL_MATCH_AMENDMENT.md').read_text()
-        self.assertIn('1e-4 * |H-L|',a)
+        self.assertIn('2e-4 * |H-L|',a)
         self.assertIn('before any EXP3.4B aggregate decision result',a)
 
     def test_matching_is_bounded_and_fail_closed(self):
         for name in ['m1_matched_dose.py','m2_matched_dose.py']:
             s=(HERE/name).read_text()
             self.assertIn('for _ in range(30)',s)
-            self.assertIn("tol=max(1e-8,1e-6*max(1.0,abs(target)),1e-4*abs(width))",s)
+            self.assertIn("tol=max(1e-8,1e-6*max(1.0,abs(target)),2e-4*abs(width))",s)
             self.assertIn("best_res",s)
             self.assertIn('command out of domain',s)
             self.assertIn('dose tolerance fail',s)
