@@ -30,6 +30,10 @@ assert list(CFG['decision_primary_history_ids'])==['H00','H01','H04','H06','H07'
 def full_action(v):
     return np.array([0,0,0,float(v),0,0],dtype=np.float32)
 
+def locked_exp31_ah(t,vp):
+    # Deliberately preserve the locked EXP3.1 utility representation exactly.
+    return 216.7*np.asarray(vp,dtype=float)/(np.asarray(t,dtype=float)+273.15)
+
 def common_state(x):
     x=np.asarray(x,dtype=float)
     return {
@@ -169,7 +173,7 @@ def run_action(latent,r,vent):
         errs.append(float(np.max(np.abs(applied-a))))
         finite=finite and bool(np.all(np.isfinite(e.x)))
         T=float(e.x[2]); VP=float(e.x[15])
-        trace.append({'horizon_min':15*(k+1),'T':T,'VP':VP,'AH':float(ah_g_m3_from_vp_pa(T,VP))})
+        trace.append({'horizon_min':15*(k+1),'T':T,'VP':VP,'AH':float(locked_exp31_ah(T,VP))})
     env.close()
     return trace,float(max(errs)),bool(finite),float(init_err)
 
