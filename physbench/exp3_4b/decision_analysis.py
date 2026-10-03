@@ -77,8 +77,20 @@ match['combined_tolerance']=match.acceptance_tolerance_M1+match.acceptance_toler
 match['cross_model_gap_fraction_of_combined_tol']=(
     match.cross_model_achieved_dose_abs_gap/match.combined_tolerance
 )
-assert np.allclose(match.common_width_M1,match.common_width_M2,rtol=0,atol=1e-12)
-match['common_width']=match.common_width_M1
+cell_keys=['event_id','horizon_min','coordinate']
+match['reconstructed_common_width']=match.groupby(cell_keys)['target_dose'].transform(
+    lambda s: float(s.max()-s.min())
+)
+if 'common_width_M1' in match.columns and 'common_width_M2' in match.columns:
+    assert np.allclose(match.common_width_M1,match.common_width_M2,rtol=0,atol=1e-12)
+    match['common_width']=match.common_width_M1
+elif 'common_width' in match.columns:
+    # M1's accepted artifact omitted this redundant column during the Amendment-3 schema extension.
+    # M2 retains the frozen EXP3.4A width; verify it against q=0/q=1 target endpoints before use.
+    match['common_width']=match.common_width.astype(float)
+else:
+    match['common_width']=match.reconstructed_common_width
+assert np.allclose(match.common_width,match.reconstructed_common_width,rtol=0,atol=2e-12)
 match['cross_model_gap_fraction_of_common_span']=(
     match.cross_model_achieved_dose_abs_gap/match.common_width
 )

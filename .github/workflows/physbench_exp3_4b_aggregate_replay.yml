@@ -1,0 +1,66 @@
+name: PhysBench EXP3.4B Aggregate Replay
+
+on:
+  push:
+    branches: [exp3-4b-aggregate-replay]
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  aggregate-replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install aggregate dependencies
+        run: python -m pip install numpy==1.26.4 pandas==2.2.3
+      - name: Download locked PASS M1 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: exp3-4b-m1
+          path: _m1
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: colbyamiee31-boop/qwq
+          run-id: 37103104462
+      - name: Download locked PASS M2 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: exp3-4b-m2
+          path: _m2
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: colbyamiee31-boop/qwq
+          run-id: 37103104462
+      - name: Download locked EXP3.1 final
+        uses: actions/download-artifact@v4
+        with:
+          name: exp3-1-final
+          path: _exp31
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: colbyamiee31-boop/qwq
+          run-id: 37024060571
+      - name: Stage immutable inputs
+        run: |
+          set -euxo pipefail
+          mkdir -p evidence/EXP3_4B_M1 evidence/EXP3_4B_M2 evidence/EXP3_1_LOCKED_FINAL
+          cp -a _m1/evidence/EXP3_4B_M1/. evidence/EXP3_4B_M1/
+          cp -a _m2/evidence/EXP3_4B_M2/. evidence/EXP3_4B_M2/
+          cp -a _exp31/evidence/FINAL/. evidence/EXP3_1_LOCKED_FINAL/
+      - name: Analyze matched-dose decisions
+        run: |
+          set -euxo pipefail
+          python physbench/exp3_4b/decision_analysis.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exp3-4b-final
+          path: |
+            evidence/EXP3_4B_M1/
+            evidence/EXP3_4B_M2/
+            evidence/EXP3_4B_FINAL/
+            physbench/exp3_4b/
+          retention-days: 90
+          if-no-files-found: error
