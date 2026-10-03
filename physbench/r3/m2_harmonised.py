@@ -66,7 +66,7 @@ for stage in STAGES:
         audits.append({'track':'CTIFL','stage':stage,'event_id':r.event_id,'init_err':max(ap['init_err'],aq['init_err']),'action_err':max(ap['action_err'],aq['action_err']),'finite':ap['finite'] and aq['finite'],**{f'g_{k}':v for k,v in ap['geometry'].items()}})
         for p0,p1 in zip(pre,post):
             h=p0['horizon_min']
-            ct_rows.append({'model':'M2','stage':stage,'event_id':r.event_id,'event_date':r.event_date,'daynight':r.daynight,'horizon_min':h,'delta_u':float(r.delta_u),'T_gradient_C':float(r.T_gradient_C),'AH_gradient_g_m3':float(r.AH_gradient_g_m3),'event_Windsp':float(r.event_Windsp),'model_T_delta':p1['T']-p0['T'],'model_AH_delta':p1['AH']-p0['AH'],'delta_DV':p1['DV']-p0['DV'],'delta_DN':p1['DN']-p0['DN'],'u_pre':float(r.u_pre),'u_post':float(r.u_post),'obs_T_delta':float(r[f'obs_T_matched_{h}']),'obs_AH_delta':float(r[f'obs_AH_matched_{h}'])})
+            ct_rows.append({'model':'M2','stage':stage,'event_id':r.event_id,'event_date':r.event_date,'daynight':r.daynight,'horizon_min':h,'delta_u':float(r.delta_u),'T_gradient_C':float(r.T_gradient_C),'AH_gradient_g_m3':float(r.AH_gradient_g_m3),'event_Windsp':float(r.event_Windsp),'model_T_delta':p1['T']-p0['T'],'model_AH_delta':p1['AH']-p0['AH'],'pre_T':p0['T'],'post_T':p1['T'],'pre_AH':p0['AH'],'post_AH':p1['AH'],'delta_DV':p1['DV']-p0['DV'],'delta_DN':p1['DN']-p0['DN'],'u_pre':float(r.u_pre),'u_post':float(r.u_post),'obs_T_delta':float(r[f'obs_T_matched_{h}']),'obs_AH_delta':float(r[f'obs_AH_matched_{h}'])})
     for _,r in D2E.iterrows():
         for u in ACTIONS:
             tr,aud=run_arm(r,float(u),stage)
