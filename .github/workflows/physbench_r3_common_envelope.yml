@@ -128,6 +128,13 @@ jobs:
           mkdir -p evidence/R3/M1 evidence/R3/M2
           cp -r dl_m1/evidence/R3/M1/* evidence/R3/M1/
           cp -r dl_m2/evidence/R3/M2/* evidence/R3/M2/
+      - name: Download first-run finite M2 H-stage numerical reference
+        uses: actions/download-artifact@v4
+        with:
+          name: r3-m2
+          path: baseline_m2_h30
+          run-id: 37148237389
+          github-token: ${{ github.token }}
       - name: Download frozen native R1.2 baseline
         uses: actions/download-artifact@v4
         with:
