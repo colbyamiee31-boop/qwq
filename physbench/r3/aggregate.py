@@ -198,6 +198,23 @@ for stage in STAGES:
     q=DE[(DE.stage==stage)&(DE.horizon_min==15)&(DE.lambda_max==1.0)&(DE.event_id.isin(locked))][['event_id','decision_disagreement_measure','normalized_action_gap_integral','any_disagreement']].copy(); bridge=pd.concat([bridge,q],ignore_index=True)
 bridge.to_csv(OUT/'08_locked_events_27_86_89_bridge.csv',index=False,float_format='%.12g')
 
+# M2 numerical sensitivity: final 10-s H versus complete finite 30-s H from first run
+OLDM2C=pd.read_csv(ROOT/'baseline_m2_h30/evidence/R3/M2/ctifl_event_responses.csv')
+OLDM2G=pd.read_csv(ROOT/'baseline_m2_h30/evidence/R3/M2/d2_action_grid.csv')
+solver_rows=[]
+old=OLDM2C[OLDM2C.stage=='H']; new=M2C[M2C.stage=='H']
+z=old.merge(new,on=['cohort','event_id','horizon_min'],suffixes=('_30s','_10s'),validate='one_to_one')
+for col in ['model_T_delta','model_AH_delta','delta_DV','delta_DN']:
+    d=np.abs(z[f'{col}_10s'].to_numpy(float)-z[f'{col}_30s'].to_numpy(float))
+    solver_rows.append({'track':'CTIFL_H','quantity':col,'n':len(d),'max_abs_difference':float(np.max(d)),'median_abs_difference':float(np.median(d))})
+old=OLDM2G[OLDM2G.stage=='H']; new=M2G[M2G.stage=='H']
+z=old.merge(new,on=['event_id','horizon_min','action'],suffixes=('_30s','_10s'),validate='one_to_one')
+for col in ['T','AH','DV','DN']:
+    d=np.abs(z[f'{col}_10s'].to_numpy(float)-z[f'{col}_30s'].to_numpy(float))
+    solver_rows.append({'track':'D2_H','quantity':col,'n':len(d),'max_abs_difference':float(np.max(d)),'median_abs_difference':float(np.median(d))})
+SOLVER=pd.DataFrame(solver_rows)
+SOLVER.to_csv(OUT/'09_M2_solver_10s_vs_30s_H.csv',index=False,float_format='%.12g')
+
 # machine summary and hard runtime gates
 primary_div=DS.set_index('stage').to_dict(orient='index')
 primary_dec=DSUMALL[(DSUMALL.horizon_min==15)&(DSUMALL.lambda_max==1.0)].set_index('stage').to_dict(orient='index')
@@ -209,7 +226,7 @@ summary={
  'primary_response_divergence':primary_div,
  'primary_decision_bridge':primary_dec,
  'anchor_primary_events':40,
- 'scientific_improvement_not_runtime_gate':True
+ 'scientific_improvement_not_runtime_gate':True,'M2_solver_sensitivity':SOLVER.to_dict(orient='records')
 }
 summary['gate_pass']=bool(S1['gate_pass'] and S2['gate_pass'] and height_err<=1e-9 and len(DIV[DIV.stage=='HV'])==97 and len(DE[(DE.stage=='HV')&(DE.horizon_min==15)&(DE.lambda_max==1.0)])==61)
 (OUT/'SUMMARY.json').write_text(json.dumps(summary,indent=2)); print(json.dumps(summary,indent=2))
