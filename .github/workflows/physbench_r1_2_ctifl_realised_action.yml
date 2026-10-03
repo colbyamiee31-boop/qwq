@@ -1,0 +1,145 @@
+name: PhysBench R1.2 CTIFL Realised-Action Validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [r1-2-ctifl-realised-action-validation]
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install preparation dependencies
+        run: python -m pip install pandas==2.2.3 numpy==1.26.4
+      - name: Download frozen CTIFL raw archive
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 5 --retry-delay 5             "https://zenodo.org/records/14943559/files/Supplementary_Information_v0.zip?download=1"             -o CTIFL_Supplementary_Information_v0.zip
+          echo "d0e4486fa1041fac5e6e47673b6c95d3  CTIFL_Supplementary_Information_v0.zip" | md5sum -c -
+      - name: Reconstruct frozen matched inputs
+        run: |
+          mkdir -p physbench/r1_2/generated
+          python physbench/r1_2/prepare_inputs.py             CTIFL_Supplementary_Information_v0.zip             physbench/r1_2/generated
+      - name: Protocol and input gates
+        run: python physbench/r1_2/test_protocol.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: r1-2-prepared-inputs
+          path: physbench/r1_2/generated/
+          retention-days: 90
+          if-no-files-found: error
+
+  m1:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v4
+        with:
+          name: r1-2-prepared-inputs
+          path: physbench/r1_2/generated
+      - name: Install frozen M1
+        run: |
+          set -euxo pipefail
+          git clone --no-tags https://github.com/BartvLaatum/GreenLight-Gym2.git GreenLight-Gym2
+          git -C GreenLight-Gym2 checkout --detach 2d3febb1ea002b24b452e32293e990beb78d3ce1
+          python -m pip install --upgrade pip
+          python -m pip install -r physbench/r1_2/requirements-m1.txt ./GreenLight-Gym2
+          python -m pip freeze | sort > evidence_R1_2_M1_PIP_FREEZE.txt
+      - name: Run M1 on frozen matched CTIFL cohort
+        run: python physbench/r1_2/m1_run.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r1-2-m1
+          path: |
+            evidence/R1_2/M1/
+            evidence_R1_2_M1_PIP_FREEZE.txt
+          retention-days: 90
+          if-no-files-found: error
+
+  m2:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v4
+        with:
+          name: r1-2-prepared-inputs
+          path: physbench/r1_2/generated
+      - name: Install frozen M2
+        run: |
+          set -euxo pipefail
+          git clone --no-tags https://github.com/jdsjxin/CSGtom.git CSGtom
+          git -C CSGtom checkout --detach bea8c3b0a1324162a4b5487db578aa674c8b587c
+          python -m pip install --upgrade pip
+          python -m pip install -r physbench/r1_2/requirements-m2.txt
+          python -m pip freeze | sort > evidence_R1_2_M2_PIP_FREEZE.txt
+      - name: Run M2 on frozen matched CTIFL cohort
+        run: python physbench/r1_2/m2_run.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r1-2-m2
+          path: |
+            evidence/R1_2/M2/
+            evidence_R1_2_M2_PIP_FREEZE.txt
+          retention-days: 90
+          if-no-files-found: error
+
+  aggregate:
+    needs: [prepare, m1, m2]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install pandas==2.2.3 numpy==1.26.4 scipy==1.14.1
+      - uses: actions/download-artifact@v4
+        with:
+          name: r1-2-prepared-inputs
+          path: physbench/r1_2/generated
+      - uses: actions/download-artifact@v4
+        with:
+          name: r1-2-m1
+          path: dl_m1
+      - uses: actions/download-artifact@v4
+        with:
+          name: r1-2-m2
+          path: dl_m2
+      - name: Assemble evidence paths
+        run: |
+          mkdir -p evidence/R1_2/M1 evidence/R1_2/M2
+          cp -r dl_m1/evidence/R1_2/M1/* evidence/R1_2/M1/
+          cp -r dl_m2/evidence/R1_2/M2/* evidence/R1_2/M2/
+      - name: Aggregate realised-action validation
+        run: python physbench/r1_2/aggregate.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: r1-2-final
+          path: |
+            evidence/R1_2/FINAL/
+            evidence/R1_2/M1/summary.json
+            evidence/R1_2/M2/summary.json
+            physbench/r1_2/
+          retention-days: 90
+          if-no-files-found: error
