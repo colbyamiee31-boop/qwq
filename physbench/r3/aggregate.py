@@ -195,7 +195,9 @@ DSUMALL.to_csv(OUT/'07_d2_decision_native_H_HV_summary.csv',index=False,float_fo
 locked=[27,86,89]
 bridge=NATIVE_D_EVENT[(NATIVE_D_EVENT.event_id.isin(locked))&(NATIVE_D_EVENT.horizon_min==15)&(NATIVE_D_EVENT.lambda_max==1.0)][['event_id','decision_disagreement_measure','normalized_action_gap_integral','any_disagreement']].copy(); bridge['stage']='N'
 for stage in STAGES:
-    q=DE[(DE.stage==stage)&(DE.horizon_min==15)&(DE.lambda_max==1.0)&(DE.event_id.isin(locked))][['event_id','decision_disagreement_measure','normalized_action_gap_integral','any_disagreement']].copy(); bridge=pd.concat([bridge,q],ignore_index=True)
+    q=DE[(DE.stage==stage)&(DE.horizon_min==15)&(DE.lambda_max==1.0)&(DE.event_id.isin(locked))][['event_id','decision_disagreement_measure','normalized_action_gap_integral','any_disagreement']].copy()
+    q['stage']=stage
+    bridge=pd.concat([bridge,q],ignore_index=True)
 bridge.to_csv(OUT/'08_locked_events_27_86_89_bridge.csv',index=False,float_format='%.12g')
 
 # M2 numerical sensitivity: final 10-s H versus complete finite 30-s H from first run
