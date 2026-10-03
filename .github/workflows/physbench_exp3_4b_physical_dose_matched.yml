@@ -25,7 +25,7 @@ jobs:
           echo '951efcb6c15a8040579f5a679cc23cd6a3a81e094a17f6cc2527fdd7f9cbba96  physbench/exp3_4b/test_protocol.py' | sha256sum -c -
           echo '24dde2ae31fa51496c95aed742b862924cc99b8d998a55aadcef186dd8b33c8a  physbench/exp3_4b/m1_matched_dose.py' | sha256sum -c -
           echo '884c51ab81cf546e5b4b3679ae99b25a64f71013892031e7e6b2a26d41df723a  physbench/exp3_4b/m2_matched_dose.py' | sha256sum -c -
-          echo 'fabce7b661d1fa54bacbfd65ba9c2515f73e068eb2ede3fe2e6962cb21571719  physbench/exp3_4b/aggregate_exp3_4b.py' | sha256sum -c -
+          test "$(git hash-object physbench/exp3_4b/aggregate_exp3_4b.py)" = '0a699e761c3d4724e71829f06b0bfa11d8e9333c'
           sha256sum physbench/exp3_4b/PROTOCOL.md physbench/exp3_4b/common.py physbench/exp3_4b/test_protocol.py > EXP3_4B_PROTOCOL_FREEZE_SHA256.txt
       - name: Install lightweight dependencies
         run: python -m pip install numpy==1.26.4 pandas==2.2.3
