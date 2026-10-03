@@ -77,10 +77,20 @@ match['combined_tolerance']=match.acceptance_tolerance_M1+match.acceptance_toler
 match['cross_model_gap_fraction_of_combined_tol']=(
     match.cross_model_achieved_dose_abs_gap/match.combined_tolerance
 )
-assert np.allclose(match.common_width_M1,match.common_width_M2,rtol=0,atol=1e-12)
-match['common_width']=match.common_width_M1
+if 'common_width_M1' in match.columns and 'common_width_M2' in match.columns:
+    assert np.allclose(match['common_width_M1'],match['common_width_M2'],rtol=0,atol=1e-12)
+    match['common_width']=match['common_width_M1']
+else:
+    # Current locked artifacts store common_width explicitly in M2 only.
+    # Verify that this single stored width equals the q=1 minus q=0 frozen target span
+    # for every event/horizon/coordinate cell before using it.
+    assert 'common_width' in match.columns
+    frozen_span=match.groupby(
+        ['event_id','horizon_min','coordinate']
+    )['target_dose'].transform(lambda x: float(x.max()-x.min()))
+    assert np.allclose(match['common_width'].to_numpy(float),frozen_span.to_numpy(float),rtol=0,atol=1e-9)
 match['cross_model_gap_fraction_of_common_span']=(
-    match.cross_model_achieved_dose_abs_gap/match.common_width
+    match.cross_model_achieved_dose_abs_gap/match['common_width']
 )
 assert np.all(match.cross_model_achieved_dose_abs_gap<=match.combined_tolerance+1e-15)
 match.to_csv(OUT/'matched_dose_cross_model_audit.csv',index=False,float_format='%.12g')
