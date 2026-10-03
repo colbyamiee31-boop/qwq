@@ -8,9 +8,10 @@ from models.csg_climate import CSG_Climate
 from parameters import example
 from functions import csg_fun,csg_shape
 CT=ROOT/'physbench/r3/generated/PRIMARY_97_R2_INPUT.csv'
+CTS=ROOT/'physbench/r3/generated/STRICT_36_R2_INPUT.csv'
 D2=ROOT/'physbench/exp2_1c/D2_PRIMARY_61_MODEL_INPUT.csv'
 OUT=ROOT/'evidence/R3/M2'; OUT.mkdir(parents=True,exist_ok=True)
-CTE=pd.read_csv(CT); D2E=pd.read_csv(D2)
+CTSETS=[('primary',pd.read_csv(CT)),('strict',pd.read_csv(CTS))]; D2E=pd.read_csv(D2)
 def const(v): return lambda t,vv=float(v):vv
 
 def base_parameters():
@@ -61,12 +62,13 @@ def run_arm(r,u,stage):
 
 ct_rows=[]; grid_rows=[]; audits=[]
 for stage in STAGES:
-    for _,r in CTE.iterrows():
+    for cohort,CTE in CTSETS:
+      for _,r in CTE.iterrows():
         pre,ap=run_arm(r,float(r.u_pre),stage); post,aq=run_arm(r,float(r.u_post),stage)
-        audits.append({'track':'CTIFL','stage':stage,'event_id':r.event_id,'init_err':max(ap['init_err'],aq['init_err']),'action_err':max(ap['action_err'],aq['action_err']),'finite':ap['finite'] and aq['finite'],**{f'g_{k}':v for k,v in ap['geometry'].items()}})
+        audits.append({'track':'CTIFL','cohort':cohort,'stage':stage,'event_id':r.event_id,'init_err':max(ap['init_err'],aq['init_err']),'action_err':max(ap['action_err'],aq['action_err']),'finite':ap['finite'] and aq['finite'],**{f'g_{k}':v for k,v in ap['geometry'].items()}})
         for p0,p1 in zip(pre,post):
             h=p0['horizon_min']
-            ct_rows.append({'model':'M2','stage':stage,'event_id':r.event_id,'event_date':r.event_date,'daynight':r.daynight,'horizon_min':h,'delta_u':float(r.delta_u),'T_gradient_C':float(r.T_gradient_C),'AH_gradient_g_m3':float(r.AH_gradient_g_m3),'event_Windsp':float(r.event_Windsp),'model_T_delta':p1['T']-p0['T'],'model_AH_delta':p1['AH']-p0['AH'],'pre_T':p0['T'],'post_T':p1['T'],'pre_AH':p0['AH'],'post_AH':p1['AH'],'delta_DV':p1['DV']-p0['DV'],'delta_DN':p1['DN']-p0['DN'],'u_pre':float(r.u_pre),'u_post':float(r.u_post),'obs_T_delta':float(r[f'obs_T_matched_{h}']),'obs_AH_delta':float(r[f'obs_AH_matched_{h}'])})
+            ct_rows.append({'model':'M2','cohort':cohort,'stage':stage,'event_id':r.event_id,'event_date':r.event_date,'daynight':r.daynight,'horizon_min':h,'delta_u':float(r.delta_u),'T_gradient_C':float(r.T_gradient_C),'AH_gradient_g_m3':float(r.AH_gradient_g_m3),'event_Windsp':float(r.event_Windsp),'model_T_delta':p1['T']-p0['T'],'model_AH_delta':p1['AH']-p0['AH'],'pre_T':p0['T'],'post_T':p1['T'],'pre_AH':p0['AH'],'post_AH':p1['AH'],'delta_DV':p1['DV']-p0['DV'],'delta_DN':p1['DN']-p0['DN'],'u_pre':float(r.u_pre),'u_post':float(r.u_post),'obs_T_delta':float(r[f'obs_T_matched_{h}']),'obs_AH_delta':float(r[f'obs_AH_matched_{h}'])})
     for _,r in D2E.iterrows():
         for u in ACTIONS:
             tr,aud=run_arm(r,float(u),stage)
@@ -82,6 +84,6 @@ ad.to_csv(OUT/'runtime_audit.csv',index=False,float_format='%.12g')
 summary={'model':'M2','ctifl_rows':len(ct),'d2_rows':len(grid),'all_finite':bool(ad.finite.all()),'max_init_error':float(ad.init_err.max()),'max_action_error':float(ad.action_err.max()),'stage_geometry':{}}
 for stage in STAGES:
     a=ad[ad.stage==stage].iloc[0]; summary['stage_geometry'][stage]={k[2:]:float(a[k]) for k in ad.columns if k.startswith('g_')}
-summary['gate_pass']=bool(len(ct)==97*2*2 and len(grid)==61*5*2*2 and summary['all_finite'] and summary['max_init_error']<=1e-8 and summary['max_action_error']<=1e-10 and all(abs(summary['stage_geometry'][s]['effective_height_m']-H_TARGET)<=1e-12 for s in STAGES) and abs(summary['stage_geometry']['HV']['roof_aperture_ratio_m2_m2']-VENT_PROJECTED_RATIO)<=1e-12)
+summary['gate_pass']=bool(len(ct)==(97+36)*2*2 and len(grid)==61*5*2*2 and summary['all_finite'] and summary['max_init_error']<=1e-8 and summary['max_action_error']<=1e-10 and all(abs(summary['stage_geometry'][s]['effective_height_m']-H_TARGET)<=1e-12 for s in STAGES) and abs(summary['stage_geometry']['HV']['roof_aperture_ratio_m2_m2']-VENT_PROJECTED_RATIO)<=1e-12)
 (OUT/'summary.json').write_text(json.dumps(summary,indent=2)); print(json.dumps(summary,indent=2))
 if not summary['gate_pass']: raise SystemExit('R3 M2 gate failed')
