@@ -249,9 +249,11 @@ def paired_mechanism(latent,c0,cache_key):
     return {'LOW':lo,'HIGH':hi,'vector':v,'actual_high_minus_low_ppm':actual,
             'reconstructed_ppm':reconstructed,'closure_error_ppm':float(reconstructed-actual)}
 
-def vector_metrics(v,anchor_v):
+def vector_metrics(v,anchor_v,closure_error_ppm):
     arr=np.asarray([v[k] for k in VECTOR_NAMES],dtype=float); l1=float(np.sum(np.abs(arr)))
     norm=arr/l1 if l1>0 else np.zeros_like(arr); idx=int(np.argmax(np.abs(arr)))
+    order=np.argsort(-np.abs(arr)); top=float(abs(arr[order[0]])); second=float(abs(arr[order[1]]))
+    resolved=bool((top-second)>abs(float(closure_error_ppm)))
     aa=np.asarray([anchor_v[k] for k in VECTOR_NAMES],dtype=float); al1=float(np.sum(np.abs(aa))); an=aa/al1 if al1>0 else np.zeros_like(aa)
     den=float(np.linalg.norm(norm)*np.linalg.norm(an))
     shared=[i for i in range(len(VECTOR_NAMES)) if abs(norm[i])>=ACTIVE_SHARE and abs(an[i])>=ACTIVE_SHARE]
@@ -263,7 +265,7 @@ def vector_metrics(v,anchor_v):
          'anchor_l1_distance':float(np.sum(np.abs(norm-an))),
          'dominant_switch_from_hnr':bool(VECTOR_NAMES[idx]!=VECTOR_NAMES[int(np.argmax(np.abs(aa)))]) if l1>0 and al1>0 else False,
          'active_term_sign_flips_vs_hnr':'|'.join(flips),'n_active_term_sign_flips_vs_hnr':int(len(flips)),
-         'l1_total_abs_ppm':l1}
+         'l1_total_abs_ppm':l1,'dominant_resolved_under_closure_bound':resolved}
     for i,k in enumerate(VECTOR_NAMES): out[f'norm_{k}']=float(norm[i])
     return out
 
@@ -310,7 +312,7 @@ anchor_v=anchor_pair['vector']
 mechanism_rows=[]; term_rows=[]
 def add_mechanism(duration_h,hid,latent,root):
     pair=paired_mechanism(latent,float(root),f'{hid}_{duration_h}_900')
-    m=vector_metrics(pair['vector'],anchor_v)
+    m=vector_metrics(pair['vector'],anchor_v,pair['closure_error_ppm'])
     max_action=max(pair['LOW']['max_requested_applied_error'],pair['HIGH']['max_requested_applied_error'])
     max_arm_closure=max(abs(pair['LOW']['total_ode_vs_actual_closure_ppm']),abs(pair['HIGH']['total_ode_vs_actual_closure_ppm']))
     row={'model_id':'M2','duration_h':duration_h,'history_id':hid,'root_ppm':float(root),
