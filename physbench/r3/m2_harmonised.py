@@ -16,7 +16,7 @@ def const(v): return lambda t,vv=float(v):vv
 
 def base_parameters():
     p=example.parameters(); p['outdoorDataFileURL']=str(CSG/'data/example_data.xls'); p['UFileURL']=str(CSG/'data/example_u.xls')
-    p['StartTime']='2017-09-01T00:00'; p['EndTime']='2017-09-01T03:00'; p['dtsim']=900; p['dt']=30
+    p['StartTime']='2017-09-01T00:00'; p['EndTime']='2017-09-01T03:00'; p['dtsim']=900; p['dt']=10
     p['ctl_vent_type']='timebasedControl'; p['ctl_blank_type']='timebasedControl'
     return p
 
@@ -47,15 +47,15 @@ def run_arm(r,u,stage):
     csg_fun.ctl_csg1=logged
     try: y=model.run((0.0,1800.0))
     finally: csg_fun.ctl_csg1=orig
-    if len(vents)!=60: raise AssertionError((stage,r.event_id,u,len(vents)))
+    if len(vents)!=180: raise AssertionError((stage,r.event_id,u,len(vents)))
     vent=np.asarray(vents,float); applied=np.asarray(acts,float); t=np.asarray(y['t'],float)
     init_err=max(abs(float(iv[sv.index('T_air')])-float(r.event_Tair)),abs(float(iv[sv.index('VP')])-float(r.in_vp_pa)),abs(float(iv[sv.index('CO2')])-float(r.CO2_pre_ppm)),abs(float(iv[sv.index('T_can')])-float(getattr(r,'canopy_temperature_c_closure',r.event_Tair))))
     finite=bool(np.all(np.isfinite(vent)) and all(np.all(np.isfinite(np.asarray(y[k],float))) for k in sv))
     out=[]
-    for sec,n in [(900.0,30),(1800.0,60)]:
+    for sec,n in [(900.0,90),(1800.0,180)]:
         hits=np.where(np.isclose(t,sec,rtol=0,atol=1e-9))[0]
         if len(hits)!=1: raise AssertionError((stage,r.event_id,u,sec,hits))
-        j=int(hits[0]); T=float(np.asarray(y['T_air'])[j]); VP=float(np.asarray(y['VP'])[j]); dose=float(np.sum(vent[:n])*30.0)
+        j=int(hits[0]); T=float(np.asarray(y['T_air'])[j]); VP=float(np.asarray(y['VP'])[j]); dose=float(np.sum(vent[:n])*10.0)
         out.append({'horizon_min':int(sec/60),'T':T,'AH':float(ah_from_t_vp(T,VP)),'DV':dose,'DN':dose/H_TARGET})
     geom={'effective_height_m':float(model.D.Vair/model.D.area_floor),'roof_aperture_ratio_m2_m2':float(model.p['Atop_vent']*model.p['r_net']/model.D.area_floor),'area_floor_m2_per_m':float(model.D.area_floor),'Vair_m3_per_m':float(model.D.Vair),'Atop_vent_parameter':float(model.p['Atop_vent']),'r_net':float(model.p['r_net'])}
     return out,{'init_err':init_err,'action_err':float(np.max(np.abs(applied-float(u)))),'finite':finite,'geometry':geom}
@@ -81,7 +81,7 @@ ct=pd.DataFrame(ct_rows); grid=pd.DataFrame(grid_rows); ad=pd.DataFrame(audits)
 ct.to_csv(OUT/'ctifl_event_responses.csv',index=False,float_format='%.12g')
 grid.to_csv(OUT/'d2_action_grid.csv',index=False,float_format='%.12g')
 ad.to_csv(OUT/'runtime_audit.csv',index=False,float_format='%.12g')
-summary={'model':'M2','ctifl_rows':len(ct),'d2_rows':len(grid),'all_finite':bool(ad.finite.all()),'max_init_error':float(ad.init_err.max()),'max_action_error':float(ad.action_err.max()),'stage_geometry':{}}
+summary={'model':'M2','ctifl_rows':len(ct),'d2_rows':len(grid),'all_finite':bool(ad.finite.all()),'max_init_error':float(ad.init_err.max()),'max_action_error':float(ad.action_err.max()),'native_integration_step_s':10,'stage_geometry':{}}
 for stage in STAGES:
     a=ad[ad.stage==stage].iloc[0]; summary['stage_geometry'][stage]={k[2:]:float(a[k]) for k in ad.columns if k.startswith('g_')}
 summary['gate_pass']=bool(len(ct)==(97+36)*2*2 and len(grid)==61*5*2*2 and summary['all_finite'] and summary['max_init_error']<=1e-8 and summary['max_action_error']<=1e-10 and all(abs(summary['stage_geometry'][s]['effective_height_m']-H_TARGET)<=1e-12 for s in STAGES) and abs(summary['stage_geometry']['HV']['roof_aperture_ratio_m2_m2']-VENT_PROJECTED_RATIO)<=1e-12)
