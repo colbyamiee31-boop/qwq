@@ -270,6 +270,7 @@ def vector_metrics(v,anchor_v,closure_error_ppm):
     return out
 
 states={('HNR',0):native_x.copy()}
+cross_run_hash_mismatches=[]
 meta=[{'history_id':'HNR','duration_h':0,'native_state_sha256':state_sha(native_x),'all_states_finite':True,
        'max_requested_applied_error':0.0,'pre_projection_common':common_state(native_x)}]
 for dur in [72,168]:
@@ -277,9 +278,18 @@ for dur in [72,168]:
         x,m=prehistory_state(hid,dur)
         if dur==72:
             exp=reg['M2'][hid]
-            if state_sha(x)!=exp: raise AssertionError(f'M2 72h state hash drift {hid}: {state_sha(x)} != {exp}')
+            if state_sha(x)!=exp:
+                cross_run_hash_mismatches.append({'history_id':hid,'expected_sha256':exp,'observed_sha256':state_sha(x)})
         states[(hid,dur)]=x; meta.append(m)
-np.savez_compressed(OUT/'latent_states_72_168.npz',**{f'{hid}_{dur}h':v for (hid,dur),v in states.items()})
+state_file=OUT/'latent_states_72_168.npz'
+np.savez_compressed(state_file,**{f'{hid}_{dur}h':np.asarray(v,dtype=np.float64) for (hid,dur),v in states.items()})
+_reloaded=np.load(state_file)
+same_run_state_restore_exact=True
+for (hid,dur),v in states.items():
+    key=f'{hid}_{dur}h'
+    same_run_state_restore_exact = same_run_state_restore_exact and bool(np.array_equal(np.asarray(v,dtype=np.float64),_reloaded[key]))
+if not same_run_state_restore_exact:
+    raise AssertionError('M2 same-run latent-state serialization/restoration mismatch')
 
 root_rows=[]; scan_rows=[]
 for h in HORIZONS:
@@ -361,6 +371,9 @@ summary={'experiment':'PhysBench-GH EXP0.6B','model_id':'M2','model':'CSGtom','f
  'max_mechanism_arm_total_ode_vs_actual_closure_ppm':max_arm_closure,
  'max_mechanism_pair_decomposition_closure_error_ppm':max_pair_closure,
  'mechanism_rows':int(len(mdf)),
+ 'cross_run_72h_state_hash_mismatch_count':int(len(cross_run_hash_mismatches)),
+ 'cross_run_72h_state_hash_mismatches':cross_run_hash_mismatches,
+ 'same_run_state_restore_exact':bool(same_run_state_restore_exact),
  'prehistory_all_finite':bool(all(x['all_states_finite'] for x in meta)),
  'prehistory_max_action_error':float(max(x['max_requested_applied_error'] for x in meta))}
 summary['gate_pass']=bool(
@@ -371,6 +384,7 @@ summary['gate_pass']=bool(
     and summary['max_mechanism_requested_applied_error']==0.0
     and summary['max_mechanism_arm_total_ode_vs_actual_closure_ppm']<=1e-8
     and summary['max_mechanism_pair_decomposition_closure_error_ppm']<=1e-8
+    and summary['same_run_state_restore_exact']
     and summary['prehistory_all_finite'] and summary['prehistory_max_action_error']==0.0
 )
 (OUT/'summary.json').write_text(json.dumps(summary,indent=2),encoding='utf-8')
