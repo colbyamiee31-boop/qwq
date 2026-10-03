@@ -75,6 +75,8 @@ def event_datetime(r):
     return _dt.datetime(2017,int(r.month),int(r.day),hh,mm)
 
 def build_model(r,u,horizon):
+    # Reproduce the EXP3.4A execution path exactly: always construct the
+    # native 30-min run, then read the 15-min prefix when requested.
     p=base_parameters()
     p['T_soilbound']=float(r.soil_boundary_temperature_c_fixed)
     iv=NATIVE.copy()
@@ -82,11 +84,11 @@ def build_model(r,u,horizon):
                      'CO2':float(r.CO2_pre_ppm),'T_can':float(r.event_Tair)}.items():
         iv[SV.index(name)]=val
     p['InitialValues']=iv.copy()
-    sec=int(horizon)*60
-    tsim=np.arange(0,sec+p['dtsim'],p['dtsim'],dtype=float)
+    sec_full=1800
+    tsim=np.arange(0,sec_full+p['dtsim'],p['dtsim'],dtype=float)
     x0={name:iv[i] for i,name in enumerate(SV)}
     model=CSG_Climate(tsim,p['dt'],x0,p)
-    st=event_datetime(r); en=st+_dt.timedelta(seconds=sec)
+    st=event_datetime(r); en=st+_dt.timedelta(seconds=sec_full)
     model.p['StartTime']=st.strftime('%Y-%m-%dT%H:%M')
     model.p['EndTime']=en.strftime('%Y-%m-%dT%H:%M')
     model.D=csg_shape.csg_shape(model.p)
@@ -117,12 +119,12 @@ def evaluate(r,u,horizon):
     csg_fun.ctl_csg1=logged
     sec=h*60
     try:
-        y=model.run((0.0,float(sec)))
+        y=model.run((0.0,1800.0))
     finally:
         csg_fun.ctl_csg1=orig
     n=sec//30
-    if len(vent_records)!=n:
-        raise AssertionError((int(r.event_id),u,h,'expected M2 ventilation evaluations',n,len(vent_records)))
+    if len(vent_records)!=60:
+        raise AssertionError((int(r.event_id),u,h,'expected 60 M2 ventilation evaluations',len(vent_records)))
     vent=np.asarray(vent_records,dtype=float)
     applied=np.asarray(action_records,dtype=float)
     if not np.all(np.isfinite(vent)): raise RuntimeError((int(r.event_id),u,h,'nonfinite vent'))
@@ -133,7 +135,7 @@ def evaluate(r,u,horizon):
     hits=np.where(np.isclose(t,float(sec),rtol=0,atol=1e-9))[0]
     if len(hits)!=1: raise AssertionError((int(r.event_id),u,h,'terminal time',hits))
     j=int(hits[0])
-    dose=float(np.sum(vent)*DT)
+    dose=float(np.sum(vent[:n])*DT)
     heff=float(model.D.Vair/model.D.area_floor)
     T=float(np.asarray(y['T_air'])[j]); VP=float(np.asarray(y['VP'])[j])
     init_err=max(
