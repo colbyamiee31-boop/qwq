@@ -18,7 +18,7 @@ def source(cohort):
     return x
 def build(cohort,maskcol,anchor='23_23'):
     x=source(cohort); x=x[x[maskcol].astype(bool)].copy()
-    z=C[C.cohort==cohort].merge(x,on=['event_id','event_date'],how='inner',validate='many_to_one')
+    z=C[C.cohort==cohort].merge(x.drop(columns=['cohort']),on=['event_id','event_date'],how='inner',validate='many_to_one')
     z['emp_DV']=z[f'emp_delta_DV_{anchor}']; z['emp_DN']=z[f'emp_delta_DN_{anchor}']
     return z
 def metric(z,coord,model='pooled'):
