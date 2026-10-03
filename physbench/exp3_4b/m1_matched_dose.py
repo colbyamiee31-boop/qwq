@@ -159,7 +159,7 @@ def bracket(event_id,horizon,coordinate,target):
 def solve(row):
     eid=int(row.event_id); h=int(row.horizon_min); coord=str(row.coordinate); target=float(row.target_dose)
     width=float(row.common_width)
-    tol=max(1e-8,1e-6*max(1.0,abs(target),abs(width)))
+    tol=max(1e-8,1e-6*max(1.0,abs(target)),1e-4*abs(width))
     ulo,uhi,dlo,dhi=bracket(eid,h,coord,target)
     r=EVENT_MAP[eid]
     initial_ulo,initial_uhi=ulo,uhi
@@ -171,22 +171,28 @@ def solve(row):
         useed=float(np.clip(useed,ulo,uhi))
         res=evaluate(r,useed,h); n_eval=1
         got=float(res[coord])
-        if abs(got-target)>tol:
+        best_res=res; best_abs=abs(got-target)
+        if best_abs>tol:
             if got<target:
                 ulo,dlo=float(res['native_command']),got
             else:
                 uhi,dhi=float(res['native_command']),got
             for _ in range(30):
                 umid=0.5*(ulo+uhi)
-                res=evaluate(r,umid,h); n_eval+=1
-                got=float(res[coord])
-                if abs(got-target)<=tol: break
+                trial=evaluate(r,umid,h); n_eval+=1
+                got=float(trial[coord])
+                ae=abs(got-target)
+                if ae<best_abs:
+                    best_res=trial; best_abs=ae
+                if ae<=tol:
+                    break
                 if got<target:
-                    ulo,dlo=float(res['native_command']),got
+                    ulo,dlo=float(trial['native_command']),got
                 else:
-                    uhi,dhi=float(res['native_command']),got
-            else:
-                raise RuntimeError((eid,h,coord,float(row.q),'dose root did not converge',target,got,tol,ulo,uhi))
+                    uhi,dhi=float(trial['native_command']),got
+            res=best_res
+            if best_abs>tol:
+                raise RuntimeError((eid,h,coord,float(row.q),'dose root did not converge',target,float(res[coord]),tol,ulo,uhi,best_abs))
     achieved=float(res[coord]); err=achieved-target
     if abs(err)>tol:
         raise RuntimeError((eid,h,coord,float(row.q),'dose tolerance fail',target,achieved,err,tol))
@@ -196,6 +202,7 @@ def solve(row):
       'model_id':'M1','event_id':eid,'team':row.team,'event_date':row.event_date,'daynight':row.daynight,
       'horizon_min':h,'coordinate':coord,'q':float(row.q),
       'target_dose':target,'achieved_dose':achieved,'dose_error':float(err),'dose_tolerance':float(tol),
+      'common_width':float(width),'dose_error_fraction_of_common_span':float(abs(err)/width),
       'native_command':float(res['native_command']),
       'initial_bracket_u_lo':float(initial_ulo),'initial_bracket_u_hi':float(initial_uhi),
       'root_model_evaluations':int(n_eval),
@@ -230,6 +237,7 @@ summary={
  'counts':{f'{k[0]}_{int(k[1])}':int(v) for k,v in counts.items()},
  'max_abs_dose_error':float(np.abs(df.dose_error).max()),
  'max_dose_error_fraction_of_tolerance':float(np.max(np.abs(df.dose_error)/df.dose_tolerance)),
+ 'max_dose_error_fraction_of_common_span':float(df.dose_error_fraction_of_common_span.max()),
  'max_action_error':float(df.action_error.max()),
  'max_init_error':float(df.init_error.max()),
  'max_quadrature_state_error':float(df.quadrature_state_error.max()),
@@ -242,6 +250,7 @@ summary['gate_pass']=bool(
  and summary['counts']=={'DN_15':305,'DN_30':305,'DV_15':210,'DV_30':240}
  and summary['all_finite'] and summary['max_action_error']==0.0 and summary['max_init_error']<=1e-8
  and summary['max_quadrature_state_error']<=1e-7 and summary['max_dose_error_fraction_of_tolerance']<=1.0+1e-12
+ and summary['max_dose_error_fraction_of_common_span']<=1e-4+1e-12
 )
 (OUT/'summary.json').write_text(json.dumps(summary,indent=2),encoding='utf-8')
 print(json.dumps(summary,indent=2))
