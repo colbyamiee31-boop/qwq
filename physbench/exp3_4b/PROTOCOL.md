@@ -101,9 +101,9 @@ Maximum bisection iterations: 30. The best evaluated command by absolute dose re
 
 Dose-match tolerance for coordinate x:
 
-`tol_match = max(1e-8, 1e-6 * max(1, |D_target|), 1e-4 * |H-L|)`.
+`tol_match = max(1e-8, 1e-6 * max(1, |D_target|), 2e-4 * |H-L|)`.
 
-This precision-aware rule is frozen in `EXP3_4B_NUMERICAL_MATCH_AMENDMENT.md` before any aggregate decision result.
+This precision-aware rule is finalized by `EXP3_4B_NUMERICAL_MATCH_AMENDMENT_2.md` before any aggregate decision result.
 
 A target is accepted only when:
 
