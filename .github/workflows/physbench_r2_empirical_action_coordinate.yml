@@ -23,10 +23,13 @@ jobs:
           set -euxo pipefail
           curl -L --fail --retry 5 --retry-delay 5 "https://zenodo.org/records/14943559/files/Supplementary_Information_v0.zip?download=1" -o CTIFL_Supplementary_Information_v0.zip
           echo "d0e4486fa1041fac5e6e47673b6c95d3  CTIFL_Supplementary_Information_v0.zip" | md5sum -c -
-      - name: Reconstruct frozen R1.2 cohorts
-        run: |
-          mkdir -p physbench/r1_2/generated
-          python physbench/r1_2/prepare_inputs.py CTIFL_Supplementary_Information_v0.zip physbench/r1_2/generated
+      - name: Download exact frozen R1.2 prepared cohort artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: r1-2-prepared-inputs
+          path: physbench/r1_2/generated
+          run-id: 37143141817
+          github-token: ${{ github.token }}
       - name: Build independent CTIFL ventilation anchor
         run: python physbench/r2/prepare_anchor.py
       - name: Protocol and anchor gates
