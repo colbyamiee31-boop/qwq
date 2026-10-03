@@ -4,7 +4,7 @@ import numpy as np,pandas as pd
 ROOT=Path(__file__).resolve().parents[2]
 P=ROOT/'physbench/r2/PROTOCOL.md'; G=ROOT/'physbench/r2/generated'
 txt=P.read_text()
-required=['3–6 m s-1','G_L(delta)','G_W(delta)','7.375 m','date-cluster bootstrap','2000','20261004','New-coordinate firewall','Scientific agreement/disagreement is never a runtime pass criterion']
+required=['3–6 m s-1','G_L(delta)','G_W(delta)','7.375 m','date-cluster bootstrap','2,000','20261004','New-coordinate firewall','Scientific agreement/disagreement is never a runtime pass criterion']
 for s in required:
     if s not in txt: raise AssertionError(('protocol_missing',s))
 p=pd.read_csv(G/'PRIMARY_97_R2_INPUT.csv'); s=pd.read_csv(G/'STRICT_36_R2_INPUT.csv')
