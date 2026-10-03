@@ -31,7 +31,7 @@ class TestEXP34BProtocol(unittest.TestCase):
         self.assertIn("gap+=width*abs(Q[i1]-Q[i2])",a)
 
     def test_numerical_amendment_is_frozen(self):
-        a=(HERE/'EXP3_4B_NUMERICAL_MATCH_AMENDMENT.md').read_text()
+        a=(HERE/'EXP3_4B_NUMERICAL_MATCH_AMENDMENT_2.md').read_text()
         self.assertIn('2e-4 * |H-L|',a)
         self.assertIn('before any EXP3.4B aggregate decision result',a)
 
