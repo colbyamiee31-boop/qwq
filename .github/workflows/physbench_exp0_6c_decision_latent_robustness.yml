@@ -1,0 +1,142 @@
+name: PhysBench EXP0.6C 61-Event Decision Latent Robustness
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [exp0-6c-decision-latent-robustness]
+
+permissions:
+  contents: read
+
+jobs:
+  protocol-and-syntax:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install lightweight test dependencies
+        run: python -m pip install numpy==1.26.4 pandas==2.2.3
+      - name: Re-run frozen EXP0.6 protocol tests
+        run: |
+          set -euxo pipefail
+          python physbench/exp0_6/test_protocol.py -v
+          python physbench/exp0_6/test_exp0_6c_protocol.py -v
+      - name: Compile EXP0.6C execution files
+        run: |
+          set -euxo pipefail
+          python -m py_compile physbench/exp0_6/m1_event_decision_latent.py
+          python -m py_compile physbench/exp0_6/m2_event_decision_latent.py
+          python -m py_compile physbench/exp0_6/aggregate_exp0_6c.py
+
+  m1:
+    needs: protocol-and-syntax
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        history: [HNR,H00,H01,H04,H06,H07,H10,H11,H13,H16]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install frozen M1
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install 'numpy==1.26.4' 'pandas==2.2.3'
+          python -m pip install 'git+https://github.com/BartvLaatum/GreenLight-Gym2.git@2d3febb1ea002b24b452e32293e990beb78d3ce1'
+          python -m pip freeze | sort > EXP0_6C_M1_${{ matrix.history }}_PIP_FREEZE.txt
+      - name: Run M1 event-aligned latent decision grid
+        run: |
+          set -euxo pipefail
+          python physbench/exp0_6/m1_event_decision_latent.py --history-id ${{ matrix.history }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: exp0-6c-m1-${{ matrix.history }}
+          path: |
+            evidence/EXP0_6C_M1_${{ matrix.history }}/
+            EXP0_6C_M1_${{ matrix.history }}_PIP_FREEZE.txt
+          retention-days: 90
+          if-no-files-found: error
+
+  m2:
+    needs: protocol-and-syntax
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        history: [HNR,H00,H01,H04,H06,H07,H10,H11,H13,H16]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install frozen M2
+        run: |
+          set -euxo pipefail
+          git clone --no-tags https://github.com/jdsjxin/CSGtom.git CSGtom
+          git -C CSGtom checkout --detach bea8c3b0a1324162a4b5487db578aa674c8b587c
+          python -m pip install --upgrade pip
+          python -m pip install 'numpy==1.23.5' 'scipy==1.14.1' 'pandas==2.2.3' 'xlrd==2.0.1'
+          python -m pip freeze | sort > EXP0_6C_M2_${{ matrix.history }}_PIP_FREEZE.txt
+      - name: Run M2 event-aligned latent decision grid
+        run: |
+          set -euxo pipefail
+          python physbench/exp0_6/m2_event_decision_latent.py --history-id ${{ matrix.history }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: exp0-6c-m2-${{ matrix.history }}
+          path: |
+            evidence/EXP0_6C_M2_${{ matrix.history }}/
+            EXP0_6C_M2_${{ matrix.history }}_PIP_FREEZE.txt
+          retention-days: 90
+          if-no-files-found: error
+
+  aggregate:
+    needs: [m1,m2]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy==1.26.4 pandas==2.2.3
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: exp0-6c-m1-*
+          path: .
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: exp0-6c-m2-*
+          path: .
+          merge-multiple: true
+      - name: Aggregate exact latent decision partitions
+        run: |
+          set -euxo pipefail
+          python physbench/exp0_6/aggregate_exp0_6c.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exp0-6c-final
+          path: |
+            evidence/EXP0_6C_M1_*/
+            evidence/EXP0_6C_M2_*/
+            evidence/EXP0_6C_FINAL/
+            physbench/exp0_6/PROTOCOL.md
+            physbench/exp0_6/EXP0_6C_EXECUTION_LOCK.md
+            physbench/exp0_6/test_exp0_6c_protocol.py
+            physbench/exp0_6/m1_event_decision_latent.py
+            physbench/exp0_6/m2_event_decision_latent.py
+            physbench/exp0_6/aggregate_exp0_6c.py
+          retention-days: 90
+          if-no-files-found: error
