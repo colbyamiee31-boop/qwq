@@ -31,6 +31,9 @@ def sha256(path):
 def ppm_to_mg_m3(t,ppm):
     return P*np.asarray(ppm)*MCO2/(R*(np.asarray(t)+K))
 
+def mg_m3_to_ppm(t,mg):
+    return R*(np.asarray(t)+K)*np.asarray(mg)/(P*MCO2)
+
 def locked_exp31_ah(t,vp):
     return 216.7*np.asarray(vp,dtype=float)/(np.asarray(t,dtype=float)+273.15)
 
