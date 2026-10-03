@@ -97,11 +97,13 @@ For each model, event, horizon, coordinate, and target dose:
 7. never leave `[0.1,0.9]`;
 8. never use a non-eligible EXP3.4A cell.
 
-Maximum bisection iterations: 30.
+Maximum bisection iterations: 30. The best evaluated command by absolute dose residual is retained.
 
 Dose-match tolerance for coordinate x:
 
-`tol = max(1e-8, 1e-6 * max(1, |D_target|, |H-L|))`.
+`tol_match = max(1e-8, 1e-6 * max(1, |D_target|), 1e-4 * |H-L|)`.
+
+This precision-aware rule is frozen in `EXP3_4B_NUMERICAL_MATCH_AMENDMENT.md` before any aggregate decision result.
 
 A target is accepted only when:
 
