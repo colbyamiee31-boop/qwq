@@ -1,0 +1,20 @@
+name: PhysBench R4 Aerodynamic Transport Isolation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [r4-aerodynamic-transport-isolation]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m py_compile physbench/r4/common.py physbench/r4/m1_common_flux.py physbench/r4/m2_common_flux.py physbench/r4/aggregate.py physbench/r4/test_protocol.py
