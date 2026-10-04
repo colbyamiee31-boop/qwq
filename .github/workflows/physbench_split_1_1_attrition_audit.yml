@@ -1,0 +1,49 @@
+name: PhysBench SPLIT-1.1 R1.2 Attrition Audit
+
+on:
+  push:
+    branches: [split-1-1-r1-2-attrition-audit]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  attrition-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install frozen audit dependencies
+        run: python -m pip install pandas==2.2.3 numpy==1.26.4
+      - name: Download frozen CTIFL archive
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 5 --retry-delay 5             "https://zenodo.org/records/14943559/files/Supplementary_Information_v0.zip?download=1"             -o CTIFL_Supplementary_Information_v0.zip
+          echo "d0e4486fa1041fac5e6e47673b6c95d3  CTIFL_Supplementary_Information_v0.zip" | md5sum -c -
+      - name: Execute outcome-blind attrition audit
+        run: |
+          python physbench/split_1_1/r1_2_attrition_audit.py             CTIFL_Supplementary_Information_v0.zip             evidence/SPLIT_1_1
+      - name: Verify frozen reproduction counts
+        run: |
+          python - <<'PY'
+          import pandas as pd
+          s=pd.read_csv('evidence/SPLIT_1_1/SPLIT_1_1_ATTRITION_SUMMARY.csv')
+          d=dict(zip(s.cohort,s.matched))
+          assert d['primary_385']==97, d
+          assert d['strict_90']==36, d
+          print('PASS',d)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: split-1-1-r1-2-attrition-audit
+          path: |
+            evidence/SPLIT_1_1/
+            physbench/split_1_1/SPLIT_1_1_PROTOCOL_LOCK.md
+            physbench/split_1_1/r1_2_attrition_audit.py
+          retention-days: 90
+          if-no-files-found: error
