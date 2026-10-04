@@ -1,0 +1,16 @@
+{
+  "raw_npz_sha256": "e3c6bf7a35e71a0b29cf2e3397afafd008c4496967bf0fa82d3d52ed68c0677c",
+  "raw_npz_bytes": 767251,
+  "xz_sha256": "d061319ba4750b970de86744804b23326fdce248a51a8060929cf0bf2e0d940b",
+  "xz_bytes": 209448,
+  "base85_chars": 261810,
+  "payload_parts": 14,
+  "part_bytes_nominal": 19000,
+  "atlas_rows": 1195,
+  "G1": 226,
+  "G2": 586,
+  "G3": 383,
+  "forcing_nodes": 25,
+  "forcing_step_min": 15,
+  "replay_horizon_h": 6
+}
