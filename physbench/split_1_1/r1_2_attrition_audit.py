@@ -79,7 +79,7 @@ def build_control_pool(df,t0):
     cdt=df.loc[ci,'dt']; cday=(cdt.dt.normalize()-t0).dt.days.to_numpy(); cclock=(cdt.dt.hour*60+cdt.dt.minute).to_numpy(float)
     def arr(c): return df.loc[ci,c].to_numpy()
     C={
-      'ci':ci,'T':T,'AH':AH,'Tp':Tp,'Ap':Ap,'cday':cday,'cclock':cclock,
+      'ci':ci,'T':T,'AH':AH,'Tp':Tp,'Ap':Ap,'cTp':Tp[ci],'cAp':Ap[ci],'cday':cday,'cclock':cclock,
       'cv':df.loc[ci,'vent_mean'].to_numpy(float),'cT':T[ci],'cA':AH[ci],
       'cTo':arr('Outdoor air temperature').astype(float),'cHo':arr('Outdoor humidity ratio').astype(float),
       'cG':arr('Global Horizontal Irradiance (measure)').astype(float),'cWs':arr('Wind speed').astype(float),
