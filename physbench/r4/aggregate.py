@@ -182,7 +182,7 @@ COST=((ACTIONS-0.1)/0.8)**2
 def benefit_table(df,eid):
     x=df[df.event_id==eid].sort_values('action')
     gt=float(x.T_gradient_C.iloc[0]); ga=float(x.AH_gradient_g_m3.iloc[0])
-    T=x.T.to_numpy(float); AH=x.AH.to_numpy(float)
+    T=x['T'].to_numpy(float); AH=x['AH'].to_numpy(float)
     bT=-np.sign(gt)*(T-T[0])/abs(gt)
     bA=-np.sign(ga)*(AH-AH[0])/abs(ga)
     return .5*(bT+bA),x
