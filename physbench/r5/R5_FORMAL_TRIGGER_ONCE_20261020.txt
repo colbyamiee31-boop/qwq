@@ -1,0 +1,1 @@
+One-time R5 formal GreenLight run; execute the frozen protocol once after C8 PASS. No rerun authorized.
