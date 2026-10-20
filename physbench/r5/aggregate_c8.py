@@ -30,7 +30,10 @@ EXPECTED={
  'r4_summary':'884b8bc49849d2d29f9e313d77783f38e92c6fe8919e27e72c196c35fcc40c2',
  'r4_pip_freeze':'2fb80e3b624877760690513dcc6f0b12fd8ecff3f945b1a3ec1d69e420ad9013',
  'r3_hv_responses':'f102765b460b1646e82017a6f6c9761f4b072b7eab027ce6b23238557c6a8ffe',
- 'prepared_input':'0127756518d8a481d8f79e27b0a0d57bd2b9e6d9d94232202109869f5a792d5b'
+ 'prepared_input':'0127756518d8a481d8f79e27b0a0d57bd2b9e6d9d94232202109869f5a792d5b',
+ 'field_flux':'b669a1209cc0e641b567bd5dbbc2f23c103ac3efbd91998a54f8a8a4939939cd',
+ 'field_json':'4c7ae6aaab48097e522bb305b8353bae23ac59ffb0775508c077d6d1b130fc3b',
+ 'event_list_v2':'5721220e0ebb13750ae7b89950f7998e80836d3c52d0c8ee9309380ef82167b5'
 }
 checks=[]
 failures=[]
@@ -59,6 +62,9 @@ for src,name in [
  (MODEL/'c8_model_console.log','C8_model_console.log')
 ]:
     if src.is_file(): shutil.copy2(src,OUT/name)
+for src in MODEL.iterdir() if MODEL.is_dir() else []:
+    if src.is_file(): shutil.copy2(src,OUT/src.name)
+if MODEL_PIP.is_file(): shutil.copy2(MODEL_PIP,ROOT/'evidence_R5_M1_PIP_FREEZE.txt')
 add('prepare_job_succeeded',PREPARE_RESULT=='success',PREPARE_RESULT)
 add('C8_model_job_succeeded',C8_RESULT=='success',C8_RESULT)
 check_file_hash('frozen_R4_CF0_response_file',REF,'r4_cf0_responses')
@@ -67,6 +73,15 @@ check_file_hash('frozen_R4_summary_file',REF_SUMMARY,'r4_summary')
 check_file_hash('frozen_R4_pip_freeze_file',BASE_PIP,'r4_pip_freeze')
 check_file_hash('frozen_R3_HV_reference_file',BASE_R3,'r3_hv_responses')
 check_file_hash('frozen_R4_prepared_input_file',PREP,'prepared_input')
+check_file_hash('field_flux_reference_implementation',ROOT/'physbench/r5/field_flux.py','field_flux')
+check_file_hash('field_ventilation_function_parameters',ROOT/'physbench/r5/field_ventilation_function.json','field_json')
+check_file_hash('R5_event_list_v2',ROOT/'physbench/r5/R5_event_list_97_v2.csv','event_list_v2')
+field_test=ROOT/'precheck-output/evidence/R5/C8/field_flux_unit_tests.log'
+input_test=ROOT/'precheck-output/evidence/R5/C8/protocol_input_checks.log'
+add('field_flux_reference_tests',field_test.is_file() and 'field_flux unit tests PASS' in field_test.read_text(),
+    'log present='+str(field_test.is_file()))
+add('frozen_input_join_and_40_event_tests',input_test.is_file() and 'protocol_input_gate' in input_test.read_text() and 'PASS' in input_test.read_text(),
+    'log present='+str(input_test.is_file()))
 model_summary=load_json(MODEL_SUMMARY,'C8_model_summary_readable')
 ref_summary=load_json(REF_SUMMARY,'frozen_R4_summary_readable')
 if model_summary:
