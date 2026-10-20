@@ -3,7 +3,7 @@ name: R5 formal GreenLight field-flux experiment
 on:
   push:
     branches: [r5-field-ventilation-flux]
-    paths: [physbench/r5/R5_FORMAL_TRIGGER_ONCE_20261020_v2.txt]
+    paths: [physbench/r5/R5_FORMAL_TRIGGER_ONCE_20261020_v3.txt]
 
 permissions:
   contents: read
@@ -39,7 +39,7 @@ jobs:
           token = os.environ["GH_TOKEN"]
           workflow = "physbench_r5_formal.yml"
           branch = "r5-field-ventilation-flux"
-          marker = "physbench/r5/R5_FORMAL_TRIGGER_ONCE_20261020_v2.txt"
+          marker = "physbench/r5/R5_FORMAL_TRIGGER_ONCE_20261020_v3.txt"
           base = f"https://api.github.com/repos/{repo}"
           headers = {
               "Accept": "application/vnd.github+json",
@@ -57,13 +57,20 @@ jobs:
           payload = get_json(f"{base}/actions/workflows/{workflow}/runs?branch={branch}&per_page=100")
           runs = payload.get("workflow_runs", [])
           run_ids = [str(r.get("id")) for r in runs]
-          if len(runs) != 2 or run_id not in run_ids or "39372067352" not in run_ids:
-              raise SystemExit("One-time guard failed: workflow history must contain exactly two runs: 39372067352 and the current run.")
-          jobs_payload = get_json(f"{base}/actions/runs/39372067352/jobs")
-          m1_jobs = [j for j in jobs_payload.get("jobs", []) if j.get("name") == "m1"]
-          if not m1_jobs or m1_jobs[0].get("conclusion") != "skipped" or len(m1_jobs[0].get("steps", [])) != 0:
+          if len(runs) != 3 or run_id not in run_ids or "39372067352" not in run_ids or "39387663913" not in run_ids:
+              raise SystemExit("One-time guard failed: workflow history must contain exactly three runs: 39372067352, 39387663913 and the current run.")
+          jobs_3937 = get_json(f"{base}/actions/runs/39372067352/jobs")
+          m1_3937 = [j for j in jobs_3937.get("jobs", []) if j.get("name") == "m1"]
+          if not m1_3937 or m1_3937[0].get("conclusion") != "skipped" or len(m1_3937[0].get("steps", [])) != 0:
               raise SystemExit("One-time guard failed: prior run 39372067352 m1 job was not skipped with 0 executed steps.")
-          print("One-time guard PASS: attempt 1; marker-only commit; exactly two formal runs on branch, prior run skipped m1.")
+          jobs_3938 = get_json(f"{base}/actions/runs/39387663913/jobs")
+          m1_3938 = [j for j in jobs_3938.get("jobs", []) if j.get("name") == "m1"]
+          if not m1_3938 or m1_3938[0].get("conclusion") != "failure":
+              raise SystemExit("One-time guard failed: prior run 39387663913 m1 job was not failed.")
+          art_1224 = get_json(f"{base}/actions/artifacts/12248087110")
+          if art_1224.get("name") != "r5-formal-m1" or art_1224.get("workflow_run", {}).get("id") != 39387663913 or art_1224.get("expired") is True:
+              raise SystemExit("One-time guard failed: artifact 12248087110 is not valid r5-formal-m1 from run 39387663913.")
+          print("One-time guard PASS: attempt 1; marker-only commit; exactly three formal runs on branch; prior runs verified.")
           PY
 
       - name: Audit every branch-matching push workflow and enforce static scope
@@ -77,10 +84,15 @@ jobs:
           old_c8 = "physbench_r5_c8_reproduction.yml"
           reaudit = "physbench_r5_c8_reaudit.yml"
           formal = "physbench_r5_formal.yml"
+          diag_d1 = "physbench_r5_diag_d1.yml"
+          diag_d1_v2 = "physbench_r5_diag_d1_v2.yml"
           old_c8_marker = "physbench/r5/C8_TRIGGER_ONCE_20261020B.txt"
           reaudit_marker = "physbench/r5/C8_REAUDIT_TRIGGER_ONCE_20261020.txt"
-          formal_marker = "physbench/r5/R5_FORMAL_TRIGGER_ONCE_20261020_v2.txt"
+          formal_marker = "physbench/r5/R5_FORMAL_TRIGGER_ONCE_20261020_v3.txt"
           old_formal_marker = "physbench/r5/R5_FORMAL_TRIGGER_ONCE_20261020.txt"
+          v2_formal_marker = "physbench/r5/R5_FORMAL_TRIGGER_ONCE_20261020_v2.txt"
+          diag_d1_marker = "physbench/r5/R5_DIAG_D1_TRIGGER_ONCE_20261020.txt"
+          diag_d1_v2_marker = "physbench/r5/R5_DIAG_D1_TRIGGER_ONCE_20261020_v2.txt"
           def events_for(document)
             document["on"] || document[true] || {}
           end
@@ -101,12 +113,14 @@ jobs:
             events = events_for(doc)
             branch_matches?(events["push"], branch)
           end
-          expected_names = [old_c8, reaudit, formal].sort
+          expected_names = [old_c8, reaudit, formal, diag_d1, diag_d1_v2].sort
           abort "Trigger audit failed: unexpected branch-matching workflows: #{matching.keys.sort.inspect}" unless matching.keys.sort == expected_names
           expected_paths = {
             old_c8 => [old_c8_marker],
             reaudit => [reaudit_marker],
             formal => [formal_marker],
+            diag_d1 => [diag_d1_marker],
+            diag_d1_v2 => [diag_d1_v2_marker],
           }
           matching.each do |name, doc|
             events = events_for(doc)
@@ -116,7 +130,7 @@ jobs:
             abort "Trigger audit failed: #{name} path filter changed: #{paths.inspect}" unless paths == expected_paths.fetch(name)
           end
           changed_files = `git diff-tree --no-commit-id --name-only -r HEAD`.split("\n").map(&:strip)
-          forbidden_markers = [old_c8_marker, reaudit_marker, old_formal_marker]
+          forbidden_markers = [old_c8_marker, reaudit_marker, old_formal_marker, v2_formal_marker, diag_d1_marker, diag_d1_v2_marker]
           touched_forbidden = changed_files & forbidden_markers
           abort "Trigger audit failed: push touches forbidden markers: #{touched_forbidden.inspect}" unless touched_forbidden.empty?
           formal_doc = docs.fetch(formal)
@@ -164,7 +178,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install frozen input-audit runtime
-        run: python -m pip install pandas==2.2.3 numpy==1.26.4
+        run: python -m pip install pandas==2.2.3 numpy==1.26.4 scipy==1.14.1
       - name: Verify frozen R4 prepared-input artifact identity
         env:
           GH_TOKEN: ${{ github.token }}
@@ -286,6 +300,31 @@ jobs:
           if report["status"]!="PASS":
               raise SystemExit("R5 prepare gate failed.")
           PY
+      - name: Download frozen R3 M1 HV reference for offline test
+        uses: actions/download-artifact@v4
+        with:
+          name: r3-m1
+          path: baseline_r3
+          run-id: 37163085468
+          github-token: ${{ github.token }}
+      - name: Download frozen R4 M1 CF0 reference for offline test
+        uses: actions/download-artifact@v4
+        with:
+          name: r4-m1
+          path: baseline_r4
+          run-id: 37164458429
+          github-token: ${{ github.token }}
+      - name: Download run 39387663913 formal M1 artifact for offline test
+        uses: actions/download-artifact@v4
+        with:
+          name: r5-formal-m1
+          path: baseline_r5_v2
+          run-id: 39387663913
+          github-token: ${{ github.token }}
+      - name: Run offline aggregate test
+        run: |
+          set -euo pipefail
+          python physbench/r5/test_aggregate_offline.py
       - name: Upload validated frozen prepared inputs
         if: always()
         uses: actions/upload-artifact@v4

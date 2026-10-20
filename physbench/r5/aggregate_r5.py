@@ -215,17 +215,22 @@ def make_r5_canonical(response, states, inputs):
                               how="outer", indicator=True, validate="one_to_one")
     if len(combined) != len(response) or not (combined["_merge"] == "both").all():
         raise AssertionError("R5 response/alignment state join is incomplete")
-    metadata = inputs[[
+    meta_cols = [
         "event_id", "row_index", "event_date", "direction", "delta_u",
         "T_gradient_C", "AH_gradient_g_m3", "anchor_primary_3_6",
         "obs_T_matched_15", "obs_AH_matched_15", "obs_T_matched_30", "obs_AH_matched_30",
-    ]].copy()
+    ]
+    metadata = inputs[meta_cols].copy()
     metadata["event_id"] = metadata.event_id.astype(str)
+    metadata = metadata.rename(columns={c: c + "_input" for c in meta_cols if c != "event_id"})
     combined["event_id"] = combined.event_id.astype(str)
-    combined = combined.merge(metadata, on="event_id", how="left", suffixes=("", "_input"),
+    combined = combined.merge(metadata, on="event_id", how="left", suffixes=("", ""),
                               indicator="input_join", validate="many_to_one")
     if not (combined.input_join == "both").all():
         raise AssertionError("R5 output contains event IDs absent from the frozen input")
+    for req_col in [c + "_input" for c in meta_cols if c != "event_id"]:
+        if req_col not in combined.columns:
+            raise AssertionError(f"Missing column after metadata merge in make_r5_canonical: {req_col}")
     if not (combined.row_index.astype(int) == combined.row_index_input.astype(int)).all():
         raise AssertionError("R5 response row_index differs from the frozen input")
     if not (bool_values(combined.anchor_primary_3_6, "R5 response anchor").to_numpy() ==
@@ -233,9 +238,6 @@ def make_r5_canonical(response, states, inputs):
         raise AssertionError("R5 response subset flag differs from the frozen input")
     if not (combined.event_date.astype(str) == combined.event_date_input.astype(str)).all():
         raise AssertionError("R5 response event_date differs from the frozen input")
-    if not (bool_values(combined.anchor_primary_3_6_input, "input anchor").to_numpy() ==
-            bool_values(combined.anchor_primary_3_6, "R5 anchor").to_numpy()).all():
-        raise AssertionError("R5 anchor mismatch")
     combined["anchor_primary_3_6"] = bool_values(combined.anchor_primary_3_6_input, "input anchor")
     combined["model_delta_T"] = combined.dT_model.astype(float)
     combined["model_delta_AH"] = combined.dAH_model.astype(float)
@@ -244,13 +246,13 @@ def make_r5_canonical(response, states, inputs):
     combined["pre_AH"] = combined.pre_AH.astype(float)
     combined["post_AH"] = combined.post_AH.astype(float)
     combined["event_date"] = combined.event_date_input.astype(str)
-    combined["delta_u"] = combined.delta_u.astype(float)
-    combined["T_gradient_C"] = combined.T_gradient_C.astype(float)
-    combined["AH_gradient_g_m3"] = combined.AH_gradient_g_m3.astype(float)
+    combined["delta_u"] = combined.delta_u_input.astype(float)
+    combined["T_gradient_C"] = combined.T_gradient_C_input.astype(float)
+    combined["AH_gradient_g_m3"] = combined.AH_gradient_g_m3_input.astype(float)
     combined["dT_obs_expected"] = combined.apply(
-        lambda r: float(r.obs_T_matched_15 if r.horizon_min == 15 else r.obs_T_matched_30), axis=1)
+        lambda r: float(r.obs_T_matched_15_input if r.horizon_min == 15 else r.obs_T_matched_30_input), axis=1)
     combined["dAH_obs_expected"] = combined.apply(
-        lambda r: float(r.obs_AH_matched_15 if r.horizon_min == 15 else r.obs_AH_matched_30), axis=1)
+        lambda r: float(r.obs_AH_matched_15_input if r.horizon_min == 15 else r.obs_AH_matched_30_input), axis=1)
     if (np.abs(combined.dT_obs.astype(float) - combined.dT_obs_expected) > 1e-10).any():
         raise AssertionError("R5 dT_obs differs from the frozen observed matched effect")
     if (np.abs(combined.dAH_obs.astype(float) - combined.dAH_obs_expected) > 1e-10).any():
@@ -267,23 +269,28 @@ def make_hv_canonical(hv_source, inputs):
     ].copy()
     if len(hv) != 194 or any(len(hv[hv.horizon_min == h]) != 97 for h in HORIZONS):
         raise AssertionError(("frozen_HV_rows_not_97_per_horizon", len(hv)))
-    input_meta = inputs[[
+    meta_cols = [
         "event_id", "row_index", "event_date", "direction", "delta_u",
         "T_gradient_C", "AH_gradient_g_m3", "anchor_primary_3_6",
         "obs_T_matched_15", "obs_AH_matched_15", "obs_T_matched_30", "obs_AH_matched_30",
-    ]].copy()
-    hv["event_id"] = hv.event_id.astype(str)
+    ]
+    input_meta = inputs[meta_cols].copy()
     input_meta["event_id"] = input_meta.event_id.astype(str)
-    hv = hv.merge(input_meta, on="event_id", how="outer", suffixes=("_r3", "_input"),
+    input_meta = input_meta.rename(columns={c: c + "_input" for c in meta_cols if c != "event_id"})
+    hv["event_id"] = hv.event_id.astype(str)
+    hv = hv.merge(input_meta, on="event_id", how="outer", suffixes=("", ""),
                   indicator=True, validate="many_to_one")
     if not (hv._merge == "both").all() or len(hv) != 194:
         raise AssertionError("HV reference does not align with all frozen primary events")
-    if not (hv.event_date_r3.astype(str) == hv.event_date_input.astype(str)).all():
+    for req_col in [c + "_input" for c in meta_cols if c != "event_id"]:
+        if req_col not in hv.columns:
+            raise AssertionError(f"Missing column after metadata merge in make_hv_canonical: {req_col}")
+    if not (hv.event_date.astype(str) == hv.event_date_input.astype(str)).all():
         raise AssertionError("HV event_date differs from frozen input")
     for r3_name, input_name in [
-        ("delta_u_r3", "delta_u_input"),
-        ("T_gradient_C_r3", "T_gradient_C_input"),
-        ("AH_gradient_g_m3_r3", "AH_gradient_g_m3_input"),
+        ("delta_u", "delta_u_input"),
+        ("T_gradient_C", "T_gradient_C_input"),
+        ("AH_gradient_g_m3", "AH_gradient_g_m3_input"),
     ]:
         if (np.abs(hv[r3_name].astype(float) - hv[input_name].astype(float)) > 1e-10).any():
             raise AssertionError("HV metadata differs from frozen input: " + r3_name)
@@ -301,9 +308,9 @@ def make_hv_canonical(hv_source, inputs):
     hv["pre_AH"] = hv.pre_AH.astype(float)
     hv["post_AH"] = hv.post_AH.astype(float)
     hv["obs_delta_T"] = hv.apply(
-        lambda r: float(r.obs_T_matched_15 if r.horizon_min == 15 else r.obs_T_matched_30), axis=1)
+        lambda r: float(r.obs_T_matched_15_input if r.horizon_min == 15 else r.obs_T_matched_30_input), axis=1)
     hv["obs_delta_AH"] = hv.apply(
-        lambda r: float(r.obs_AH_matched_15 if r.horizon_min == 15 else r.obs_AH_matched_30), axis=1)
+        lambda r: float(r.obs_AH_matched_15_input if r.horizon_min == 15 else r.obs_AH_matched_30_input), axis=1)
     for column in ["q_pre_top", "q_post_top", "q_pre_main", "q_post_main"]:
         hv[column] = np.nan
     hv["q_note"] = "Frozen R3 HV response artifact has no arm-level q columns; HV was reused without rerun."
@@ -396,6 +403,8 @@ def compute_paired(canonical):
                     f["model_delta"] = f["model_delta_" + variable].astype(float)
                     f["obs_delta"] = f["obs_delta_" + variable].astype(float)
                     f["gradient"] = f["T_gradient_C" if variable == "T" else "AH_gradient_g_m3"].astype(float)
+                    f["pre_state"] = f["pre_" + variable].astype(float)
+                    f["post_state"] = f["post_" + variable].astype(float)
                     frames[condition] = f
                 for a_name, b_name in COMPARES:
                     fa, fb = frames[a_name], frames[b_name]
@@ -668,23 +677,24 @@ def main():
         raise SystemExit("R5 formal gate failure; see R5_gate_summary.json")
 
 
-try:
-    main()
-except SystemExit:
-    raise
-except BaseException:
-    ERROR_TEXT = traceback.format_exc()
-    add("aggregate_execution", False, ERROR_TEXT)
-    write_placeholder_outputs()
-    failure_summary = {
-        "status": "FAIL", "passed": False,
-        "workflow_run_id": os.environ.get("GITHUB_RUN_ID", "unknown"),
-        "failed_checks": FAILURES, "checks": CHECKS,
-        "error": ERROR_TEXT, "input_hashes": HASH_RECORDS,
-    }
-    (OUT / "R5_gate_summary.json").write_text(
-        json.dumps(safe_json(failure_summary), indent=2, allow_nan=False) + "\n", encoding="utf-8")
-    (OUT / "R5_run_log.md").write_text(
-        "# R5 formal run log\n\nStatus: FAIL\n\n" + ERROR_TEXT + "\n", encoding="utf-8")
-    raise SystemExit("R5 aggregate failed; see failure report")
+if __name__ == "__main__":
+    try:
+        main()
+    except SystemExit:
+        raise
+    except BaseException:
+        ERROR_TEXT = traceback.format_exc()
+        add("aggregate_execution", False, ERROR_TEXT)
+        write_placeholder_outputs()
+        failure_summary = {
+            "status": "FAIL", "passed": False,
+            "workflow_run_id": os.environ.get("GITHUB_RUN_ID", "unknown"),
+            "failed_checks": FAILURES, "checks": CHECKS,
+            "error": ERROR_TEXT, "input_hashes": HASH_RECORDS,
+        }
+        (OUT / "R5_gate_summary.json").write_text(
+            json.dumps(safe_json(failure_summary), indent=2, allow_nan=False) + "\n", encoding="utf-8")
+        (OUT / "R5_run_log.md").write_text(
+            "# R5 formal run log\n\nStatus: FAIL\n\n" + ERROR_TEXT + "\n", encoding="utf-8")
+        raise SystemExit("R5 aggregate failed; see failure report")
 

@@ -36,7 +36,7 @@ RESPONSE_COLUMNS = [
 ]
 AUDIT_COLUMNS = [
     "event_id", "row_index", "event_date", "condition", "arm", "horizon_min",
-    "q_top", "q_main", "flow_volume_integrated", "flow_volume_expected",
+    "q_top", "q_main", "q_top_hex", "q_main_hex", "flow_volume_integrated", "flow_volume_expected",
     "flux_identity_error", "init_err", "finite", "paired_initial_state_error",
     "paired_forcing_error", "T_state", "AH_state",
 ]
@@ -153,11 +153,11 @@ def prescribed_flux(r, arm, condition):
     leeward = float(getattr(r, f"leeward_{suffix}_pct"))
     windward = float(getattr(r, f"windward_{suffix}_pct"))
     wind = float(r.event_Windsp)
-    q_ref = float(q_common_pct(leeward, windward, wind))
     q_field = float(q_field_fn(leeward / 100.0, windward / 100.0, wind,
                                float(r.event_Tair), float(r.event_Tout)))
     if condition == "REF0":
-        return q_ref, 0.0, 1.0
+        emp_flux = float(getattr(r, f"emp_flux_{suffix}_23_23"))
+        return emp_flux, 0.0, 1.0
     if condition == "FF0":
         return q_field, 0.0, 1.0
     if condition == "FFN":
@@ -209,6 +209,7 @@ def run_arm(r, arm, condition, paired_x_error, paired_d_error):
             "event_id": str(r.event_id), "row_index": int(r.row_index),
             "event_date": str(r.event_date), "condition": condition, "arm": arm,
             "horizon_min": horizon, "q_top": float(qt), "q_main": float(qm),
+            "q_top_hex": float(qt).hex(), "q_main_hex": float(qm).hex(),
             "flow_volume_integrated": volume, "flow_volume_expected": expected,
             "flux_identity_error": abs(volume - expected), "init_err": float(init_err),
             "finite": finite, "paired_initial_state_error": float(paired_x_error),
@@ -314,6 +315,27 @@ def main():
     summary["primary_event_count"] = len(E)
     summary["anchor_primary_3_6_count"] = len(subset)
 
+    # R1 gate: check formula q_common_pct equality at 12g for all 97 events and both arms
+    max_rel_diff = 0.0
+    r1_mismatches = []
+    for _, r in E.iterrows():
+        for arm in ["pre", "post"]:
+            lw = float(r.leeward_pre_pct if arm == "pre" else r.leeward_post_pct)
+            ww = float(r.windward_pre_pct if arm == "pre" else r.windward_post_pct)
+            wspd = float(r.event_Windsp)
+            emp = float(r.emp_flux_pre_23_23 if arm == "pre" else r.emp_flux_post_23_23)
+            q_calc = float(q_common_pct(lw, ww, wspd))
+            s_calc = float(format(q_calc, ".12g"))
+            if s_calc != emp:
+                r1_mismatches.append((str(r.event_id), arm, s_calc, emp))
+            scale = max(1.0, abs(emp))
+            rel_diff = abs(q_calc - emp) / scale
+            if rel_diff > max_rel_diff:
+                max_rel_diff = rel_diff
+    add_check("r1_ref0_flux_formula_12g_equality", len(r1_mismatches) == 0,
+              json.dumps({"max_rel_diff": max_rel_diff, "mismatches": r1_mismatches}))
+    summary["r1_max_rel_diff"] = max_rel_diff
+
     r4 = pd.read_csv(R4_REFERENCE_PATH)
     r4_summary = json.loads(R4_SUMMARY_PATH.read_text(encoding="utf-8"))
     r4_audit = pd.read_csv(R4_AUDIT_PATH)
@@ -417,6 +439,9 @@ def main():
     c8_join.to_csv(OUT / "R5_embedded_C8_event_comparison.csv", index=False, float_format="%.12g")
     max_c8_t = float(c8_join.abs_T_difference.max()) if len(c8_join) else float("inf")
     max_c8_ah = float(c8_join.abs_AH_difference.max()) if len(c8_join) else float("inf")
+    s_t_matches = int((np.abs(c8_join.dT_model.apply(lambda v: float(format(v, '.12g'))) - c8_join.model_T_delta) == 0.0).sum())
+    s_ah_matches = int((np.abs(c8_join.dAH_model.apply(lambda v: float(format(v, '.12g'))) - c8_join.model_AH_delta) == 0.0).sum())
+    print(f"Embedded C8 storage-precision equality count: T={s_t_matches}/40, AH={s_ah_matches}/40", flush=True)
     c8_alignment = len(c8_join) == 40 and bool((c8_join["_merge"] == "both").all())
     c8_early_audit = (
         len(pre_gate_audit) == 160
