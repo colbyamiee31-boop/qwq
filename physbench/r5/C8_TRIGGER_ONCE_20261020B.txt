@@ -1,0 +1,3 @@
+ONE_TIME_R5_C8_TRIGGER=2026-10-20-B
+Authorized scope: R4 CF0 reproduction only; anchor_primary_3_6; 40 events.
+This marker is single-use; do not reuse or modify it.
