@@ -1,0 +1,152 @@
+name: R5 stage D1 diagnostic run v2
+
+on:
+  push:
+    branches: [r5-field-ventilation-flux]
+    paths: [physbench/r5/R5_DIAG_D1_TRIGGER_ONCE_20261020_v2.txt]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: r5-diag-d1-v2-one-shot
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Check one-time D1-v2 marker, workflow history and run 39404754210 failure
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_RUN_ID: ${{ github.run_id }}
+          GH_RUN_ATTEMPT: ${{ github.run_attempt }}
+          GH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$GH_RUN_ATTEMPT" = "1"
+          python - <<'PY'
+          import json, os, urllib.request
+          repo = os.environ["GH_REPOSITORY"]
+          run_id = str(os.environ["GH_RUN_ID"])
+          token = os.environ["GH_TOKEN"]
+          workflow = "physbench_r5_diag_d1_v2.yml"
+          branch = "r5-field-ventilation-flux"
+          marker = "physbench/r5/R5_DIAG_D1_TRIGGER_ONCE_20261020_v2.txt"
+          base = f"https://api.github.com/repos/{repo}"
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": "Bearer " + token,
+              "X-GitHub-Api-Version": "2022-11-28",
+          }
+          def get_json(url):
+              req = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(req, timeout=30) as resp:
+                  return json.load(resp)
+
+          # 1. Commit must add only the v2 trigger marker
+          commit = get_json(f"{base}/commits/{os.environ['GH_SHA']}")
+          changed = commit.get("files", [])
+          if len(changed) != 1 or changed[0].get("filename") != marker or changed[0].get("status") != "added":
+              raise SystemExit("One-time guard failed: trigger commit must add only the D1-v2 marker.")
+
+          # 2. Workflow history must contain only this current run
+          payload = get_json(f"{base}/actions/workflows/{workflow}/runs?branch={branch}&per_page=100")
+          runs = payload.get("workflow_runs", [])
+          if len(runs) != 1 or str(runs[0].get("id")) != run_id:
+              raise SystemExit("One-time guard failed: workflow history must contain only this first D1-v2 run.")
+
+          # 3. Run 39404754210 of physbench_r5_diag_d1.yml must have conclusion failure with diag job failed
+          prior_run = get_json(f"{base}/actions/runs/39404754210")
+          if prior_run.get("conclusion") != "failure":
+              raise SystemExit(f"Prior run 39404754210 conclusion is '{prior_run.get('conclusion')}', expected 'failure'.")
+          prior_jobs = get_json(f"{base}/actions/runs/39404754210/jobs")
+          diag_job = next((j for j in prior_jobs.get("jobs", []) if j.get("name") == "diag"), None)
+          if not diag_job or diag_job.get("conclusion") != "failure":
+              raise SystemExit("Prior run 39404754210 diag job did not fail as expected.")
+
+          print("One-time D1-v2 guard PASS: attempt 1; marker-only commit; first D1-v2 run; prior run 39404754210 failed.")
+          PY
+
+      - name: Enforce static scope and verify no forbidden terms
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          script = Path("physbench/r5/m1_r5_diag_d1_v2.py").read_text(encoding="utf-8")
+          copy_gate = Path("physbench/r5/check_d1_v2_copy_gate.py").read_text(encoding="utf-8")
+          workflow = Path(".github/workflows/physbench_r5_diag_d1_v2.yml").read_text(encoding="utf-8")
+          forbidden = ["q_" + "field", "F" + "F0", "F" + "FN", "F" + "FH", "field_" + "flux"]
+          for target_name, content in [("script", script), ("copy_gate", copy_gate), ("workflow", workflow)]:
+              for term in forbidden:
+                  if term in content:
+                      raise SystemExit(f"Static scope FAIL: forbidden term '{term}' found in {target_name}.")
+          print("Static scope PASS: no forbidden terms found in diagnostic scripts or workflow.")
+          PY
+
+  diag:
+    needs: guard
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Create output directory
+        run: mkdir -p evidence/R5/DIAG_D1 physbench/r5/generated
+      - name: Download frozen R4 prepared inputs
+        uses: actions/download-artifact@v4
+        with:
+          name: r4-prepared-inputs
+          path: physbench/r5/generated
+          run-id: 37164458429
+          github-token: ${{ github.token }}
+      - name: Download frozen R4 CF0 reference
+        uses: actions/download-artifact@v4
+        with:
+          name: r4-m1
+          path: baseline_r4
+          run-id: 37164458429
+          github-token: ${{ github.token }}
+      - name: Download run 39387663913 formal M1 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: r5-formal-m1
+          path: baseline_r5_formal_m1
+          run-id: 39387663913
+          github-token: ${{ github.token }}
+      - name: Install frozen M1 GreenLight and R4 dependency set
+        run: |
+          set -euxo pipefail
+          git clone --no-tags https://github.com/BartvLaatum/GreenLight-Gym2.git GreenLight-Gym2
+          git -C GreenLight-Gym2 checkout --detach 2d3febb1ea002b24b452e32293e990beb78d3ce1
+          python -m pip install --upgrade pip
+          python -m pip install -r physbench/r1_2/requirements-m1.txt -c physbench/r5/r4-pip-constraints.txt ./GreenLight-Gym2
+          python -m pip freeze | sort > evidence/R5/DIAG_D1/evidence_D1_PIP_FREEZE.txt
+      - name: Verify pip freeze byte-identical to frozen R4
+        run: |
+          set -euo pipefail
+          cmp -s evidence/R5/DIAG_D1/evidence_D1_PIP_FREEZE.txt baseline_r4/evidence_R4_M1_PIP_FREEZE.txt
+          echo "Pip freeze verified byte-identical to frozen R4 CF0 reference."
+      - name: Verify static copy gate before model execution
+        run: |
+          set -euo pipefail
+          python physbench/r5/check_d1_v2_copy_gate.py
+      - name: Run Stage D1-v2 diagnostic variants (V0-V3)
+        run: |
+          set -o pipefail
+          python physbench/r5/m1_r5_diag_d1_v2.py 2>&1 | tee evidence/R5/DIAG_D1/diag_d1_console.log
+      - name: Upload D1-v2 diagnostic package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r5-diag-d1-v2
+          path: evidence/R5/DIAG_D1
+          retention-days: 90
