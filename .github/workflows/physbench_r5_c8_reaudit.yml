@@ -1,0 +1,288 @@
+name: R5 C8 audit-layer re-audit
+
+on:
+  push:
+    branches: [r5-field-ventilation-flux]
+    paths: [physbench/r5/C8_REAUDIT_TRIGGER_ONCE_20261020.txt]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: r5-c8-reaudit-one-shot
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-24.04
+    outputs:
+      trigger_audit: ${{ steps.scope.outputs.trigger_audit }}
+    steps:
+      - name: Check out the triggering revision
+        uses: actions/checkout@v4
+      - name: Enforce one-time marker, first run, and static audit-only scope
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_RUN_ID: ${{ github.run_id }}
+          GH_RUN_ATTEMPT: ${{ github.run_attempt }}
+          GH_SHA: ${{ github.sha }}
+          GH_REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          test "$GH_RUN_ATTEMPT" = "1"
+          test "$GH_REF_NAME" = "r5-field-ventilation-flux"
+          python - <<'PY' | tee /tmp/r5-trigger-audit.txt
+          import json, os, urllib.request
+
+          repo = os.environ["GH_REPOSITORY"]
+          run_id = str(os.environ["GH_RUN_ID"])
+          token = os.environ["GH_TOKEN"]
+          workflow = "physbench_r5_c8_reaudit.yml"
+          branch = "r5-field-ventilation-flux"
+          marker = "physbench/r5/C8_REAUDIT_TRIGGER_ONCE_20261020.txt"
+          base = f"https://api.github.com/repos/{repo}"
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": "Bearer " + token,
+              "X-GitHub-Api-Version": "2022-11-28",
+          }
+
+          def get_json(url):
+              request = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(request, timeout=45) as response:
+                  return json.load(response)
+
+          commit = get_json(f"{base}/commits/{os.environ['GH_SHA']}")
+          changed = commit.get("files", [])
+          if len(changed) != 1 or changed[0].get("filename") != marker or changed[0].get("status") != "added":
+              raise SystemExit("One-time guard failed: the trigger commit must add only the designated marker.")
+
+          payload = get_json(f"{base}/actions/workflows/{workflow}/runs?branch={branch}&per_page=100")
+          runs = payload.get("workflow_runs", [])
+          if int(payload.get("total_count", len(runs))) != 1 or len(runs) != 1:
+              raise SystemExit("One-time guard failed: this workflow must have no earlier run on the branch.")
+          if str(runs[0].get("id")) != run_id:
+              raise SystemExit("One-time guard failed: workflow history does not contain only the current run.")
+          print("One-time guard PASS: attempt 1; marker-only commit; this is the first and only run.")
+
+          trigger_commit = commit
+          parents = trigger_commit.get("parents", [])
+          if len(parents) != 1:
+              raise SystemExit("Commit-chain audit failed: trigger commit must have one parent.")
+          commit2_sha = parents[0].get("sha")
+          commit2 = get_json(f"{base}/commits/{commit2_sha}")
+          commit2_files = commit2.get("files", [])
+          expected_commit2 = {
+              ".github/workflows/physbench_r5_c8_reaudit.yml",
+              "physbench/r5/reaudit_c8.py",
+          }
+          if {item.get("filename") for item in commit2_files} != expected_commit2 or any(item.get("status") != "added" for item in commit2_files):
+              raise SystemExit("Commit-chain audit failed: commit 2 must add only the re-audit workflow and script.")
+          commit2_parents = commit2.get("parents", [])
+          if len(commit2_parents) != 1:
+              raise SystemExit("Commit-chain audit failed: commit 2 must have one parent.")
+          commit1_sha = commit2_parents[0].get("sha")
+          commit1 = get_json(f"{base}/commits/{commit1_sha}")
+          commit1_files = commit1.get("files", [])
+          if len(commit1_files) != 1 or commit1_files[0].get("filename") != "physbench/r5/C8_AUDIT_AMENDMENT.md" or commit1_files[0].get("status") != "added":
+              raise SystemExit("Commit-chain audit failed: commit 1 must add only the audit amendment.")
+          commit1_parents = commit1.get("parents", [])
+          frozen_base = "257f10b84d4c4e74de4fc70e84ed27137610bb54"
+          if len(commit1_parents) != 1 or commit1_parents[0].get("sha") != frozen_base:
+              raise SystemExit("Commit-chain audit failed: commit 1 does not descend directly from the frozen R5 base.")
+          print("PASS pre-push commits 1-2 scope: amendment, script, and workflow only; frozen base history retained.")
+
+          c8_history = get_json(f"{base}/actions/workflows/physbench_r5_c8_reproduction.yml/runs?branch={branch}&per_page=100")
+          c8_runs = c8_history.get("workflow_runs", [])
+          if int(c8_history.get("total_count", len(c8_runs))) > len(c8_runs):
+              raise SystemExit("Trigger audit failed: prior C8 workflow history is truncated.")
+          unexpected = [item for item in c8_runs if item.get("head_sha") in {commit1_sha, commit2_sha}]
+          if unexpected:
+              raise SystemExit("Trigger audit failed: preparation commits unexpectedly started the original C8 workflow.")
+          print("PASS post-push verification: commits 1-2 created no run of the original C8 workflow.")
+          PY
+          ruby - <<'RUBY' | tee -a /tmp/r5-trigger-audit.txt
+          require "yaml"
+          require "json"
+
+          branch = "r5-field-ventilation-flux"
+          old_name = "physbench_r5_c8_reproduction.yml"
+          new_name = "physbench_r5_c8_reaudit.yml"
+          old_marker = "physbench/r5/C8_TRIGGER_ONCE_20261020B.txt"
+          new_marker = "physbench/r5/C8_REAUDIT_TRIGGER_ONCE_20261020.txt"
+
+          def branch_match?(push, target)
+            return false unless push.is_a?(Hash)
+            ignored = Array(push["branches-ignore"])
+            return false if ignored.any? { |pattern| File.fnmatch?(pattern, target) }
+            patterns = push["branches"]
+            return true if patterns.nil?
+            matched = false
+            Array(patterns).each do |pattern|
+              if pattern.start_with?("!")
+                matched = false if File.fnmatch?(pattern[1..], target)
+              elsif File.fnmatch?(pattern, target)
+                matched = true
+              end
+            end
+            matched
+          end
+
+          matches = []
+          Dir.glob(".github/workflows/*.{yml,yaml}").sort.each do |path|
+            workflow = YAML.safe_load(File.read(path), permitted_classes: [], permitted_symbols: [], aliases: false)
+            events = workflow["on"] || workflow[true] || {}
+            push = events.is_a?(Hash) ? events["push"] : nil
+            next unless branch_match?(push, branch)
+            name = File.basename(path)
+            paths = push.is_a?(Hash) ? Array(push["paths"]) : []
+            matches << [name, paths]
+          end
+
+          expected = {
+            old_name => [old_marker],
+            new_name => [new_marker]
+          }
+          actual = matches.to_h
+          abort "Trigger audit FAIL: matching workflows differ: #{matches.to_json}" unless actual == expected
+          puts "PASS: matching push workflows on #{branch}:"
+          matches.each { |name, paths| puts "  #{name}: paths=#{paths.to_json}" }
+          puts "PASS: previous C8 marker remains unchanged and is isolated from the re-audit marker."
+          puts "PASS: only #{new_name} matches this marker push; all other branch-restricted workflows are excluded."
+          RUBY
+          ruby - <<'RUBY' | tee -a /tmp/r5-trigger-audit.txt
+          require "yaml"
+          require "json"
+
+          workflow_path = ".github/workflows/physbench_r5_c8_reaudit.yml"
+          document = YAML.safe_load(File.read(workflow_path), permitted_classes: [], permitted_symbols: [], aliases: false)
+          events = document["on"] || document[true] || {}
+          abort "Static scope FAIL: only push may trigger this workflow." unless events.keys.map(&:to_s) == ["push"]
+          push = events["push"]
+          abort "Static scope FAIL: branch/path filters differ from the one-time marker." unless push.is_a?(Hash) && push.keys.sort == ["branches", "paths"] && Array(push["branches"]) == ["r5-field-ventilation-flux"] && Array(push["paths"]) == ["physbench/r5/C8_REAUDIT_TRIGGER_ONCE_20261020.txt"]
+          abort "Static scope FAIL: permissions differ from the read-only requirement." unless document["permissions"] == { "contents" => "read", "actions" => "read" }
+          abort "Static scope FAIL: concurrency guard differs." unless document["concurrency"] == { "group" => "r5-c8-reaudit-one-shot", "cancel-in-progress" => false }
+          jobs = document["jobs"] || {}
+          abort "Static scope FAIL: expected exactly guard and reaudit jobs." unless jobs.keys.map(&:to_s).sort == %w[guard reaudit]
+          abort "Static scope FAIL: reaudit must depend on guard." unless jobs["reaudit"]["needs"] == "guard"
+
+          forbidden = %w[GreenLight-Gym2 gl_gym casadi m1_c8_reproduction m1_common_flux requirements-m1]
+          serialized_job = JSON.generate(jobs["reaudit"])
+          script = File.read("physbench/r5/reaudit_c8.py")
+          forbidden.each do |needle|
+            abort "Static scope FAIL: forbidden model execution reference in the reaudit job or script." if serialized_job.include?(needle) || script.include?(needle)
+          end
+
+          uploads = jobs.values.flat_map { |job| Array(job["steps"]) }
+            .select { |step| step["uses"].to_s.start_with?("actions/upload-artifact@") }
+            .map { |step| step.dig("with", "name") }
+          abort "Static scope FAIL: only r5-c8-reaudit may be uploaded." unless uploads == ["r5-c8-reaudit"]
+          puts "PASS: push-only workflow, exact marker filter, read-only permissions, one-shot concurrency."
+          puts "PASS: exactly guard and reaudit jobs; reaudit contains no model execution reference."
+          puts "PASS: the only uploaded artifact name is r5-c8-reaudit."
+          RUBY
+          delimiter="R5TRIGGERAUDIT$(date +%s%N)"
+          {
+            printf 'trigger_audit<<%s\n' "$delimiter"
+            cat /tmp/r5-trigger-audit.txt
+            printf '%s\n' "$delimiter"
+          } >> "$GITHUB_OUTPUT"
+
+  reaudit:
+    needs: guard
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the re-audit revision
+        uses: actions/checkout@v4
+        with:
+          ref: r5-field-ventilation-flux
+      - name: Set up the pinned audit runtime
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install only the pinned audit dependencies
+        run: python -m pip install pandas==2.2.3 numpy==1.26.4 scipy==1.14.1
+      - name: Download original C8 precheck logs
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: r5-c8-precheck-logs
+          path: reaudit-inputs/r5-c8-precheck-logs
+          run-id: 39364637096
+          github-token: ${{ github.token }}
+      - name: Download original C8 prepared inputs
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: r5-c8-prepared-inputs
+          path: reaudit-inputs/r5-c8-prepared-inputs
+          run-id: 39364637096
+          github-token: ${{ github.token }}
+      - name: Download original C8 model output
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: r5-c8-model-output
+          path: reaudit-inputs/r5-c8-model-output
+          run-id: 39364637096
+          github-token: ${{ github.token }}
+      - name: Download original C8 reproduction artifact
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: r5-c8-reproduction
+          path: reaudit-inputs/r5-c8-reproduction
+          run-id: 39364637096
+          github-token: ${{ github.token }}
+      - name: Download frozen R4 M1 artifact
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: r4-m1
+          path: reaudit-inputs/r4-m1
+          run-id: 37164458429
+          github-token: ${{ github.token }}
+      - name: Download frozen R4 final artifact
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: r4-final
+          path: reaudit-inputs/r4-final
+          run-id: 37164458429
+          github-token: ${{ github.token }}
+      - name: Download frozen R4 prepared inputs
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: r4-prepared-inputs
+          path: reaudit-inputs/r4-prepared-inputs
+          run-id: 37164458429
+          github-token: ${{ github.token }}
+      - name: Download frozen R3 M1 artifact
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: r3-m1
+          path: reaudit-inputs/r3-m1
+          run-id: 37163085468
+          github-token: ${{ github.token }}
+      - name: Re-audit archived C8 evidence only
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_SHA: ${{ github.sha }}
+          TRIGGER_AUDIT_OUTPUT: ${{ needs.guard.outputs.trigger_audit }}
+        run: python -I physbench/r5/reaudit_c8.py
+      - name: Upload the C8 re-audit package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r5-c8-reaudit
+          path: evidence/R5/C8_REAUDIT/
+          retention-days: 90
+          if-no-files-found: error
