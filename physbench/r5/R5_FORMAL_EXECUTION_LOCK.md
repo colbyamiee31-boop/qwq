@@ -7,12 +7,12 @@
 
 | File | SHA256 |
 |---|---|
-| `physbench/r5/00_R5_CODEX_PROTOCOL.md` | `bc0344dba73d05ce1eb4d5bd6d06d736a20b668a73ac77cf8ca30972de89f897` |
-| `physbench/r5/01_PROVENANCE_AND_INPUTS.md` | `876f1fdc5d124024386095a3f1e048d48fc6b5a4af606a7ca013eb9157f7a4ec` |
-| `physbench/r5/02_PROTOCOL_CLARIFICATIONS.md` | `94e7b450b4d0ddfa269601538c8c312ab9a812e8666962c62c2410689f108042` |
-| `physbench/r5/field_flux.py` | `4d57b85e7e4130bd5ea9340c362e5a2376effb66981d540dec27b48675dad481` |
-| `physbench/r5/field_ventilation_function.json` | `fd90e01c82d7a8caebc544c0def08c05835879a866a74a3d3db4d6571e15778e` |
-| `physbench/r5/R5_event_list_97_v2.csv` | `58d475f78d3e0418339047dc7a7106162b6b3aeadf905d9620fe28e6eabc495b` |
+| `physbench/r5/00_R5_CODEX_PROTOCOL.md` | `14068e7e47be99216f4d94f680fa4c2f98853a8c65b62954a11e106aea0b3c2a` |
+| `physbench/r5/01_PROVENANCE_AND_INPUTS.md` | `ed9689861317d4444dc497d909615fbb48e2f939e8e687338d877b7731e0e229` |
+| `physbench/r5/02_PROTOCOL_CLARIFICATIONS.md` | `08c65534c0f2782f6bb599201e70069dfdf43039d3652f220b3ccf54aca49238` |
+| `physbench/r5/field_flux.py` | `b669a1209cc0e641b567bd5dbbc2f23c103ac3efbd91998a54f8a8a4939939cd` |
+| `physbench/r5/field_ventilation_function.json` | `4c7ae6aaab48097e522bb305b8353bae23ac59ffb0775508c077d6d1b130fc3b` |
+| `physbench/r5/R5_event_list_97_v2.csv` | `5721220e0ebb13750ae7b89950f7998e80836d3c52d0c8ee9309380ef82167b5` |
 
 These SHA256 values were computed from the isolated R5 branch source files and matched the corresponding frozen branch file blobs before this lock was created.
 
@@ -33,3 +33,5 @@ I checked every case-insensitive basename match in `C8_reaudit_file_hashes.csv` 
 No frozen input, event, flux parameter, evaluation rule, dependency constraint, historical branch, or original project is changed by this lock. The formal run is GreenLight M1 only. No CSGtom, refitting, or protocol adjustment is authorized.
 
 **No R5 FF outcome exists at this commit**
+
+Amended by R5_FORMAL_LOCK_AMENDMENT_1.md (CRLF->LF hash correction); original values preserved at commit 96c0f53 and in the amendment.

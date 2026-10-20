@@ -3,7 +3,7 @@ name: R5 formal GreenLight field-flux experiment
 on:
   push:
     branches: [r5-field-ventilation-flux]
-    paths: [physbench/r5/R5_FORMAL_TRIGGER_ONCE_20261020.txt]
+    paths: [physbench/r5/R5_FORMAL_TRIGGER_ONCE_20261020_v2.txt]
 
 permissions:
   contents: read
@@ -39,7 +39,7 @@ jobs:
           token = os.environ["GH_TOKEN"]
           workflow = "physbench_r5_formal.yml"
           branch = "r5-field-ventilation-flux"
-          marker = "physbench/r5/R5_FORMAL_TRIGGER_ONCE_20261020.txt"
+          marker = "physbench/r5/R5_FORMAL_TRIGGER_ONCE_20261020_v2.txt"
           base = f"https://api.github.com/repos/{repo}"
           headers = {
               "Accept": "application/vnd.github+json",
@@ -56,11 +56,14 @@ jobs:
               raise SystemExit("One-time guard failed: trigger commit must add only the designated marker.")
           payload = get_json(f"{base}/actions/workflows/{workflow}/runs?branch={branch}&per_page=100")
           runs = payload.get("workflow_runs", [])
-          if int(payload.get("total_count", len(runs))) != 1 or len(runs) != 1:
-              raise SystemExit("One-time guard failed: workflow history must contain exactly this first run.")
-          if str(runs[0].get("id")) != run_id:
-              raise SystemExit("One-time guard failed: current run is not the only workflow-history entry.")
-          print("One-time guard PASS: attempt 1; marker-only commit; this is the first and only formal run.")
+          run_ids = [str(r.get("id")) for r in runs]
+          if len(runs) != 2 or run_id not in run_ids or "39372067352" not in run_ids:
+              raise SystemExit("One-time guard failed: workflow history must contain exactly two runs: 39372067352 and the current run.")
+          jobs_payload = get_json(f"{base}/actions/runs/39372067352/jobs")
+          m1_jobs = [j for j in jobs_payload.get("jobs", []) if j.get("name") == "m1"]
+          if not m1_jobs or m1_jobs[0].get("conclusion") != "skipped" or len(m1_jobs[0].get("steps", [])) != 0:
+              raise SystemExit("One-time guard failed: prior run 39372067352 m1 job was not skipped with 0 executed steps.")
+          print("One-time guard PASS: attempt 1; marker-only commit; exactly two formal runs on branch, prior run skipped m1.")
           PY
 
       - name: Audit every branch-matching push workflow and enforce static scope
@@ -76,7 +79,8 @@ jobs:
           formal = "physbench_r5_formal.yml"
           old_c8_marker = "physbench/r5/C8_TRIGGER_ONCE_20261020B.txt"
           reaudit_marker = "physbench/r5/C8_REAUDIT_TRIGGER_ONCE_20261020.txt"
-          formal_marker = "physbench/r5/R5_FORMAL_TRIGGER_ONCE_20261020.txt"
+          formal_marker = "physbench/r5/R5_FORMAL_TRIGGER_ONCE_20261020_v2.txt"
+          old_formal_marker = "physbench/r5/R5_FORMAL_TRIGGER_ONCE_20261020.txt"
           def events_for(document)
             document["on"] || document[true] || {}
           end
@@ -111,6 +115,10 @@ jobs:
             paths = Array(push["paths"])
             abort "Trigger audit failed: #{name} path filter changed: #{paths.inspect}" unless paths == expected_paths.fetch(name)
           end
+          changed_files = `git diff-tree --no-commit-id --name-only -r HEAD`.split("\n").map(&:strip)
+          forbidden_markers = [old_c8_marker, reaudit_marker, old_formal_marker]
+          touched_forbidden = changed_files & forbidden_markers
+          abort "Trigger audit failed: push touches forbidden markers: #{touched_forbidden.inspect}" unless touched_forbidden.empty?
           formal_doc = docs.fetch(formal)
           formal_events = events_for(formal_doc)
           abort "Static scope failed: formal workflow trigger is not branch/path restricted push." unless
