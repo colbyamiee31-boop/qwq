@@ -1,0 +1,42 @@
+{
+  "model": "field-identified natural ventilation function (multi-tracer UDE, scaled variant, all 385 CTIFL vent events)",
+  "form": "q_vent = U * [sum_k aL_k * phi_k(vL) + sum_k aW_k * phi_k(vW)] + b * (vL + vW) * sqrt(max(Tin - Tout, 0))",
+  "basis": "phi_k(v) = sigmoid(slope*(v - c_k)) - sigmoid(-slope*c_k), slope=8, c_k = 0, 0.2, 0.4, 0.6, 0.8, 1.0",
+  "units": "q in m3 (air) m-2 (floor) s-1; U wind speed m/s (CTIFL mast, ~8 m); vL, vW leeward/windward feedback fraction 0-1; T in degC",
+  "centres": [
+    0.0,
+    0.2,
+    0.4,
+    0.6000000000000001,
+    0.8,
+    1.0
+  ],
+  "slope": 8.0,
+  "aL": [
+    1.2968059913440772e-09,
+    0.0009020653355579054,
+    9.34089707977161e-05,
+    1.103808367585692e-09,
+    5.169578346218172e-10,
+    3.0966521310479393e-10
+  ],
+  "aW": [
+    2.8152183724108825e-09,
+    0.0024395244111950144,
+    2.464238560233033e-09,
+    3.632151690159766e-11,
+    8.25036349225463e-12,
+    1.7788400249499704e-13
+  ],
+  "b": 0.0034629846815818137,
+  "actuator_lag_min": 0.21989696325945263,
+  "note_lag": "lag < 0.5 min, below the 5-min step; ignore",
+  "heat_factor_s_T": 0.3411732668569693,
+  "co2_factor_s_CO2": 1.1324905071896403,
+  "field_leak_m_s": {
+    "T": 9.689458368729234e-08,
+    "AH": 0.004179836611206255,
+    "CO2": 0.0005029108357956682
+  },
+  "effective_height_m": 7.375
+}
