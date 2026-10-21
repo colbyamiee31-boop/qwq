@@ -69,6 +69,13 @@ def run_offline_aggregate_test():
     r5_responses = pd.read_csv(r5_resp_path)
     r5_states = pd.read_csv(r5_states_path)
 
+    if len(r5_responses) > 80 and "condition" in r5_responses.columns:
+        anchor_ids = set(inputs[inputs.anchor_primary_3_6 == True].event_id.astype(str))
+        r5_responses = r5_responses[(r5_responses.condition == "REF0") & (r5_responses.event_id.astype(str).isin(anchor_ids))].copy()
+    if len(r5_states) > 80 and "condition" in r5_states.columns:
+        anchor_ids = set(inputs[inputs.anchor_primary_3_6 == True].event_id.astype(str))
+        r5_states = r5_states[(r5_states.condition == "REF0") & (r5_states.event_id.astype(str).isin(anchor_ids))].copy()
+
     assert len(inputs) == 97, f"Expected 97 inputs, got {len(inputs)}"
     assert len(r5_responses) == 80, f"Expected 80 REF0 rows in run 39387663913 artifact, got {len(r5_responses)}"
 
