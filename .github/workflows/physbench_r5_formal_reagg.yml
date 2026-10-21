@@ -1,0 +1,392 @@
+name: R5 formal re-aggregation and gate reconstruction
+
+on:
+  push:
+    branches: [r5-field-ventilation-flux]
+    paths: [physbench/r5/R5_FORMAL_REAGG_TRIGGER_ONCE_20261020.txt]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: r5-formal-reagg-one-shot
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      trigger_audit: ${{ steps.audit.outputs.trigger_audit }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          ref: ${{ github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: One-time guard and prior run verification
+        env:
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os, json, urllib.request
+
+          if os.environ.get("GITHUB_RUN_ATTEMPT") != "1":
+              raise SystemExit("One-time guard failed: re-aggregation must run on attempt 1 only.")
+
+          repo = os.environ.get("GITHUB_REPOSITORY", "colbyamiee31-boop/qwq")
+          run_id = os.environ.get("GITHUB_RUN_ID")
+          token = os.environ["GH_TOKEN"]
+          workflow = "physbench_r5_formal_reagg.yml"
+          branch = "r5-field-ventilation-flux"
+          marker = "physbench/r5/R5_FORMAL_REAGG_TRIGGER_ONCE_20261020.txt"
+          base = f"https://api.github.com/repos/{repo}"
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": f"Bearer {token}",
+              "User-Agent": "antigravity-r5-reagg",
+          }
+
+          def get_json(url):
+              req = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(req) as resp:
+                  return json.loads(resp.read().decode("utf-8"))
+
+          commit = get_json(f"{base}/commits/{os.environ.get('GITHUB_SHA')}")
+          files = [f.get("filename") for f in commit.get("files", [])]
+          if files != [marker]:
+              raise SystemExit(f"One-time guard failed: trigger commit touches files other than marker: {files}")
+
+          payload = get_json(f"{base}/actions/workflows/{workflow}/runs?branch={branch}&per_page=100")
+          runs = payload.get("workflow_runs", [])
+          run_ids = [str(r.get("id")) for r in runs]
+          if len(runs) != 1 or run_id not in run_ids:
+              raise SystemExit("One-time guard failed: history of this workflow must contain only the current run.")
+
+          # Verify run 39429049087 has m1 = failure and aggregate = failure
+          jobs_3942 = get_json(f"{base}/actions/runs/39429049087/jobs")
+          jobs_by_name = {j.get("name"): j for j in jobs_3942.get("jobs", [])}
+          m1_job = jobs_by_name.get("m1")
+          agg_job = jobs_by_name.get("aggregate")
+          if not m1_job or m1_job.get("conclusion") != "failure":
+              raise SystemExit("One-time guard failed: prior run 39429049087 m1 job conclusion was not failure.")
+          if not agg_job or agg_job.get("conclusion") != "failure":
+              raise SystemExit("One-time guard failed: prior run 39429049087 aggregate job conclusion was not failure.")
+
+          print("One-time guard PASS: attempt 1; marker-only commit; history has only current run; run 39429049087 verified.")
+          PY
+
+      - name: Audit every branch-matching push workflow and enforce static scope
+        id: audit
+        run: |
+          set -euo pipefail
+          ruby - <<'RUBY'
+          require "yaml"
+
+          branch = "r5-field-ventilation-flux"
+          old_c8 = "physbench_r5_c8_reproduction.yml"
+          reaudit = "physbench_r5_c8_reaudit.yml"
+          formal = "physbench_r5_formal.yml"
+          diag_d1 = "physbench_r5_diag_d1.yml"
+          diag_d1_v2 = "physbench_r5_diag_d1_v2.yml"
+          reagg = "physbench_r5_formal_reagg.yml"
+
+          old_c8_marker = "physbench/r5/C8_TRIGGER_ONCE_20261020B.txt"
+          reaudit_marker = "physbench/r5/C8_REAUDIT_TRIGGER_ONCE_20261020.txt"
+          formal_marker = "physbench/r5/R5_FORMAL_TRIGGER_ONCE_20261020_v3.txt"
+          old_formal_marker = "physbench/r5/R5_FORMAL_TRIGGER_ONCE_20261020.txt"
+          v2_formal_marker = "physbench/r5/R5_FORMAL_TRIGGER_ONCE_20261020_v2.txt"
+          diag_d1_marker = "physbench/r5/R5_DIAG_D1_TRIGGER_ONCE_20261020.txt"
+          diag_d1_v2_marker = "physbench/r5/R5_DIAG_D1_TRIGGER_ONCE_20261020_v2.txt"
+          reagg_marker = "physbench/r5/R5_FORMAL_REAGG_TRIGGER_ONCE_20261020.txt"
+
+          def events_for(document)
+            document["on"] || document[true] || {}
+          end
+
+          def branch_matches?(push_event, target_branch)
+            return false unless push_event.is_a?(Hash)
+            branches = Array(push_event["branches"])
+            branches.include?(target_branch)
+          end
+
+          matching = {}
+          Dir.glob(".github/workflows/*.{yml,yaml}").each do |path|
+            name = File.basename(path)
+            content = File.read(path)
+            doc = YAML.safe_load(content, aliases: true, filename: path) rescue YAML.safe_load(content)
+            events = events_for(doc)
+            matching[name] = events["push"] if branch_matches?(events["push"], branch)
+          end
+
+          expected_names = [old_c8, reaudit, formal, diag_d1, diag_d1_v2, reagg].sort
+          abort "Trigger audit failed: unexpected branch-matching workflows: #{matching.keys.sort.inspect}" unless matching.keys.sort == expected_names
+
+          expected_paths = {
+            old_c8 => [old_c8_marker],
+            reaudit => [reaudit_marker],
+            formal => [formal_marker],
+            diag_d1 => [diag_d1_marker],
+            diag_d1_v2 => [diag_d1_v2_marker],
+            reagg => [reagg_marker]
+          }
+
+          expected_paths.each do |wf, paths|
+            actual = Array(matching.dig(wf, "paths"))
+            abort "Trigger audit failed: #{wf} paths #{actual.inspect} != #{paths.inspect}" unless actual == paths
+          end
+
+          # Enforce static scope on workflow and new scripts
+          this_wf = File.read(".github/workflows/physbench_r5_formal_reagg.yml")
+          reconstruct_script = File.read("physbench/r5/reconstruct_m1_gates.py")
+          test_json_script = File.read("physbench/r5/test_json_numpy.py")
+
+          check_wf = this_wf.sub(/forbidden_tokens\s*=.*?\]/m, "")
+          forbidden_tokens = ["Green" + "Light-Gym2", "gl_" + "gym", "cas" + "adi", "requirements-" + "m1"]
+          forbidden_tokens.each do |token|
+            abort "Static scope failed: #{token} found in reagg workflow" if check_wf.include?(token)
+            abort "Static scope failed: #{token} found in reconstruct script" if reconstruct_script.include?(token)
+            abort "Static scope failed: #{token} found in test_json script" if test_json_script.include?(token)
+          end
+
+          abort "Static scope failed: executed m1_r5_formal.py found in reagg workflow" if this_wf.match?(/python.*m1_r5_formal\.py/)
+
+          parsed_this = YAML.safe_load(this_wf, aliases: true) rescue YAML.safe_load(this_wf)
+          jobs = parsed_this["jobs"].keys.sort
+          abort "Static scope failed: jobs #{jobs.inspect} != ['guard', 'reaggregate']" unless jobs == ["guard", "reaggregate"]
+
+          uploads = this_wf.scan(/name:\s*(r5-[a-z0-9\-]+)/).flatten
+          abort "Static scope failed: uploads #{uploads.inspect} != ['r5-formal-reagg']" unless uploads == ["r5-formal-reagg"]
+
+          report = "PASS; branch=#{branch}; only reagg marker matches this push; previous markers unchanged; jobs=guard,reaggregate; artifact=r5-formal-reagg"
+          File.open(ENV.fetch("GITHUB_OUTPUT"), "a") { |f| f.puts("trigger_audit=#{report}") }
+          puts "Trigger audit PASS: #{report}"
+          RUBY
+
+  reaggregate:
+    needs: [guard]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install aggregation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas==2.2.3 numpy==1.26.4 scipy==1.14.1
+
+      - name: Download run 39429049087 M1 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: r5-formal-m1
+          path: model-output
+          run-id: 39429049087
+          github-token: ${{ github.token }}
+
+      - name: Download run 39429049087 prepared inputs
+        uses: actions/download-artifact@v4
+        with:
+          name: r5-formal-prepared-inputs
+          path: prepared
+          run-id: 39429049087
+          github-token: ${{ github.token }}
+
+      - name: Download frozen R3 M1 HV reference
+        uses: actions/download-artifact@v4
+        with:
+          name: r3-m1
+          path: baseline_r3
+          run-id: 37163085468
+          github-token: ${{ github.token }}
+
+      - name: Download frozen R4 M1 CF0 reference
+        uses: actions/download-artifact@v4
+        with:
+          name: r4-m1
+          path: baseline_r4
+          run-id: 37164458429
+          github-token: ${{ github.token }}
+
+      - name: Download frozen R4 prepared inputs
+        uses: actions/download-artifact@v4
+        with:
+          name: r4-prepared-inputs
+          path: baseline_r4_prep
+          run-id: 37164458429
+          github-token: ${{ github.token }}
+
+      - name: Verify artifact digests and model output CSV SHA256
+        id: verify_digests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, hashlib, urllib.request
+          from pathlib import Path
+
+          repo = os.environ.get("GITHUB_REPOSITORY", "colbyamiee31-boop/qwq")
+          token = os.environ["GH_TOKEN"]
+          base = f"https://api.github.com/repos/{repo}"
+          headers = {
+              "Accept": "application/vnd.github+json",
+              "Authorization": f"Bearer {token}",
+              "User-Agent": "antigravity-r5-reagg",
+          }
+
+          def get_json(url):
+              req = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(req) as resp:
+                  return json.loads(resp.read().decode("utf-8"))
+
+          def sha256_file(p):
+              return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+
+          # 1. Verify API digests
+          expected_digests = {
+              "r3-m1": "sha256:de6ae266728fed2ed535a5f591c5c1778b74ee75a750ddfb4f65ae32be1d0979",
+              "r4-m1": "sha256:8a9867cfd9c1935668a4123990595b8085bed03daeb5d9a4e49e07f1e06fd47c",
+              "r4-prepared-inputs": "sha256:ecff6bc7586f07aac393c26698488cd98164bee418f0a71fdae9f60fe4fafe0f",
+              "r5-formal-m1": "sha256:8a1362face7a628b56cdeaff0cc3c381b171c2c0e6ec75accce7ea67e3dc604d",
+              "r5-formal-prepared-inputs": "sha256:ca7ba3e752fcd003e744aabb464769d31f2c5c153b76562698dbaa20ccfaded2",
+          }
+
+          checks = []
+          for name, exp_dig in expected_digests.items():
+              run_id = 37163085468 if "r3" in name else (37164458429 if "r4" in name else 39429049087)
+              arts = get_json(f"{base}/actions/runs/{run_id}/artifacts?per_page=100").get("artifacts", [])
+              match = next((a for a in arts if a.get("name") == name), None)
+              if not match:
+                  raise AssertionError(f"Artifact {name} not found in run {run_id}")
+              act_dig = match.get("digest")
+              if act_dig != exp_dig:
+                  raise AssertionError(f"Digest mismatch for {name}: {act_dig} != {exp_dig}")
+              checks.append({"artifact": name, "passed": True, "digest": act_dig, "id": match.get("id")})
+              print(f"Verified {name} digest: {act_dig}")
+
+          # 2. Verify m1 CSV SHA256 from Section 0
+          expected_m1_csv_hashes = {
+              "evidence/R5/FORMAL/R5_event_responses.csv": "0a0a427641ef96cf511bd5401ad40edd19106591fbc07fbac20636e3f2a81c49",
+              "evidence/R5/FORMAL/R5_runtime_audit.csv": "cebed7b174705590815924372ecdbbb946f7bd5913b11fd94025cff4f4d4f40a",
+              "evidence/R5/FORMAL/R5_embedded_C8_event_comparison.csv": "4bfa671caa163b8eb0f2bf9fc9bb962f383c3c7c21700d1493861687de1b04fa",
+              "evidence/R5/FORMAL/R5_alignment_states.csv": "a11efaeef73fdf8b4a47e1d267b123b703fc1615d5a85aa257a2d6859b5fbe07",
+          }
+
+          model_dir = Path("model-output")
+          for rel, exp_h in expected_m1_csv_hashes.items():
+              fp = model_dir / rel
+              if not fp.is_file():
+                  raise FileNotFoundError(f"Missing model CSV: {fp}")
+              act_h = sha256_file(fp)
+              if act_h != exp_h:
+                  raise AssertionError(f"SHA256 mismatch for {rel}: {act_h} != {exp_h}")
+              checks.append({"file": rel, "passed": True, "sha256": act_h})
+              print(f"Verified {rel} SHA256: {act_h}")
+
+          id_payload = {"status": "PASS", "checks": checks}
+          Path("artifact_identity.json").write_text(json.dumps(id_payload, indent=2) + "\n", encoding="utf-8")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"identities_json={json.dumps(id_payload)}\n")
+          print("Artifact identities and model CSV verification PASS")
+          PY
+
+      - name: Run NumPy JSON unit test
+        run: |
+          set -euo pipefail
+          python physbench/r5/test_json_numpy.py
+
+      - name: Run offline aggregate test
+        run: |
+          set -euo pipefail
+          python physbench/r5/test_aggregate_offline.py
+
+      - name: Reconstruct M1 gates from saved outputs
+        run: |
+          set -euo pipefail
+          python physbench/r5/reconstruct_m1_gates.py
+
+      - name: Run formal aggregation
+        env:
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_SHA: ${{ github.sha }}
+          PREPARE_RESULT: success
+          M1_RESULT: success
+          GUARD_RESULT: ${{ needs.guard.result }}
+          TRIGGER_AUDIT: ${{ needs.guard.outputs.trigger_audit }}
+          ARTIFACT_IDENTITIES_JSON: ${{ steps.verify_digests.outputs.identities_json }}
+        run: |
+          set -euo pipefail
+          python physbench/r5/aggregate_r5.py
+
+      - name: Write re-aggregation provenance
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, hashlib, os
+          from pathlib import Path
+
+          def sha256_file(p):
+              return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+
+          out_dir = Path("evidence/R5/FORMAL")
+          prov = {
+              "authority": "Claude (scientific lead for R5), 2026-10-20",
+              "action": "R5 formal re-aggregation and gate reconstruction",
+              "source_run": "39429049087",
+              "reagg_workflow_run_id": os.environ.get("GITHUB_RUN_ID"),
+              "reagg_commit_sha": os.environ.get("GITHUB_SHA"),
+              "source_artifacts": {
+                  "r5-formal-m1": {"run_id": "39429049087", "id": 12266598692, "digest": "sha256:8a1362face7a628b56cdeaff0cc3c381b171c2c0e6ec75accce7ea67e3dc604d"},
+                  "r5-formal-prepared-inputs": {"run_id": "39429049087", "id": 12267366219, "digest": "sha256:ca7ba3e752fcd003e744aabb464769d31f2c5c153b76562698dbaa20ccfaded2"},
+                  "r3-m1": {"run_id": "37163085468", "id": 11288765689, "digest": "sha256:de6ae266728fed2ed535a5f591c5c1778b74ee75a750ddfb4f65ae32be1d0979"},
+                  "r4-m1": {"run_id": "37164458429", "id": 11289405542, "digest": "sha256:8a9867cfd9c1935668a4123990595b8085bed03daeb5d9a4e49e07f1e06fd47c"},
+              },
+              "output_files": {}
+          }
+          for p in sorted(out_dir.glob("*")):
+              if p.is_file():
+                  prov["output_files"][p.name] = {
+                      "size_bytes": p.stat().st_size,
+                      "sha256": sha256_file(p)
+                  }
+
+          prov_file = out_dir / "R5_reagg_provenance.json"
+          prov_file.write_text(json.dumps(prov, indent=2) + "\n", encoding="utf-8")
+          print(f"Written re-aggregation provenance to {prov_file}")
+          PY
+
+      - name: Copy supporting logs and artifact identity into output folder
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/R5/FORMAL/logs
+          cp artifact_identity.json evidence/R5/FORMAL/
+          if [ -d model-output/evidence/R5/FORMAL ]; then
+            cp -r model-output/evidence/R5/FORMAL/* evidence/R5/FORMAL/ || true
+          fi
+
+      - name: Upload reconstructed formal R5 re-aggregation artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: r5-formal-reagg
+          path: evidence/R5/FORMAL/
+          retention-days: 90
+          if-no-files-found: error

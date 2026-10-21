@@ -27,7 +27,7 @@ INPUT_CSV = PREPARED / "PRIMARY_97_R2_INPUT.csv"
 EVENT_LIST = ROOT / "physbench/r5/R5_event_list_97_v2.csv"
 LOCK = ROOT / "physbench/r5/R5_FORMAL_EXECUTION_LOCK.md"
 PREP_GATE = PREPARED / "R5_PREPARE_GATE_SUMMARY.json"
-M1_SUMMARY = MODEL / "evidence/R5/FORMAL/R5_gate_summary.json"
+M1_SUMMARY = (OUT / "R5_gate_summary_reconstructed.json") if (OUT / "R5_gate_summary_reconstructed.json").is_file() else (MODEL / "evidence/R5/FORMAL/R5_gate_summary_reconstructed.json")
 RESPONSES = MODEL / "evidence/R5/FORMAL/R5_event_responses.csv"
 RUNTIME_AUDIT = MODEL / "evidence/R5/FORMAL/R5_runtime_audit.csv"
 ALIGNMENT_STATES = MODEL / "evidence/R5/FORMAL/R5_alignment_states.csv"
@@ -60,12 +60,18 @@ def sha256(path):
 def safe_json(value):
     if isinstance(value, dict):
         return {str(k): safe_json(v) for k, v in value.items()}
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return [safe_json(v) for v in value]
-    if isinstance(value, (float, np.floating)) and not np.isfinite(value):
-        return None
-    if isinstance(value, np.integer):
+    if isinstance(value, np.ndarray):
+        return [safe_json(v) for v in value.tolist()]
+    if isinstance(value, (bool, np.bool_)):
+        return bool(value)
+    if isinstance(value, (int, np.integer)):
         return int(value)
+    if isinstance(value, (float, np.floating)):
+        return None if not np.isfinite(value) else float(value)
+    if isinstance(value, np.generic):
+        return safe_json(value.item())
     return value
 
 
@@ -451,6 +457,8 @@ def main():
 
     prepare_gate = read_json(PREP_GATE)
     m1_summary = read_json(M1_SUMMARY)
+    if not m1_summary.get("reconstructed_from_saved_outputs") or m1_summary.get("source_run") != "39429049087":
+        raise AssertionError("M1_SUMMARY must be reconstructed from run 39429049087 outputs")
     add("one_time_guard_succeeded", guard_result == "success", guard_result)
     add("prepare_job_succeeded", prepare_result == "success", prepare_result)
     add("M1_job_succeeded", m1_result == "success", m1_result)

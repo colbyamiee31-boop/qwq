@@ -260,13 +260,19 @@ def write_outputs():
         summary["error"] = failure_text
     def finite_json(value):
         if isinstance(value, dict):
-            return {k: finite_json(v) for k, v in value.items()}
-        if isinstance(value, list):
+            return {str(k): finite_json(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
             return [finite_json(v) for v in value]
-        if isinstance(value, (float, np.floating)) and not np.isfinite(value):
-            return None
-        if isinstance(value, np.integer):
+        if isinstance(value, np.ndarray):
+            return [finite_json(v) for v in value.tolist()]
+        if isinstance(value, (bool, np.bool_)):
+            return bool(value)
+        if isinstance(value, (int, np.integer)):
             return int(value)
+        if isinstance(value, (float, np.floating)):
+            return None if not np.isfinite(value) else float(value)
+        if isinstance(value, np.generic):
+            return finite_json(value.item())
         return value
     safe_summary = finite_json(summary)
     (OUT / "R5_gate_summary.json").write_text(
