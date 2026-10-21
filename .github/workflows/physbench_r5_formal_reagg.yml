@@ -3,7 +3,7 @@ name: R5 formal re-aggregation and gate reconstruction
 on:
   push:
     branches: [r5-field-ventilation-flux]
-    paths: [physbench/r5/R5_FORMAL_REAGG_TRIGGER_ONCE_20261020.txt]
+    paths: [physbench/r5/R5_FORMAL_REAGG_TRIGGER_ONCE_20261020_v2.txt]
 
 permissions:
   contents: read
@@ -48,7 +48,7 @@ jobs:
           token = os.environ["GH_TOKEN"]
           workflow = "physbench_r5_formal_reagg.yml"
           branch = "r5-field-ventilation-flux"
-          marker = "physbench/r5/R5_FORMAL_REAGG_TRIGGER_ONCE_20261020.txt"
+          marker = "physbench/r5/R5_FORMAL_REAGG_TRIGGER_ONCE_20261020_v2.txt"
           base = f"https://api.github.com/repos/{repo}"
           headers = {
               "Accept": "application/vnd.github+json",
@@ -69,8 +69,13 @@ jobs:
           payload = get_json(f"{base}/actions/workflows/{workflow}/runs?branch={branch}&per_page=100")
           runs = payload.get("workflow_runs", [])
           run_ids = [str(r.get("id")) for r in runs]
-          if len(runs) != 1 or run_id not in run_ids:
-              raise SystemExit("One-time guard failed: history of this workflow must contain only the current run.")
+          if len(runs) != 2 or run_id not in run_ids or "39538443127" not in run_ids:
+              raise SystemExit("One-time guard failed: history of this workflow must contain exactly prior run 39538443127 and the current run.")
+
+          jobs_3953 = get_json(f"{base}/actions/runs/39538443127/jobs")
+          reagg_3953 = [j for j in jobs_3953.get("jobs", []) if j.get("name") == "reaggregate"]
+          if not reagg_3953 or reagg_3953[0].get("conclusion") != "skipped":
+              raise SystemExit("One-time guard failed: prior run 39538443127 reaggregate job was not skipped.")
 
           # Verify run 39429049087 has m1 = failure and aggregate = failure
           jobs_3942 = get_json(f"{base}/actions/runs/39429049087/jobs")
@@ -107,7 +112,8 @@ jobs:
           v2_formal_marker = "physbench/r5/R5_FORMAL_TRIGGER_ONCE_20261020_v2.txt"
           diag_d1_marker = "physbench/r5/R5_DIAG_D1_TRIGGER_ONCE_20261020.txt"
           diag_d1_v2_marker = "physbench/r5/R5_DIAG_D1_TRIGGER_ONCE_20261020_v2.txt"
-          reagg_marker = "physbench/r5/R5_FORMAL_REAGG_TRIGGER_ONCE_20261020.txt"
+          old_reagg_marker = "physbench/r5/R5_FORMAL_REAGG_TRIGGER_ONCE_20261020.txt"
+          reagg_marker = "physbench/r5/R5_FORMAL_REAGG_TRIGGER_ONCE_20261020_v2.txt"
 
           def events_for(document)
             document["on"] || document[true] || {}
@@ -164,7 +170,8 @@ jobs:
           jobs = parsed_this["jobs"].keys.sort
           abort "Static scope failed: jobs #{jobs.inspect} != ['guard', 'reaggregate']" unless jobs == ["guard", "reaggregate"]
 
-          uploads = this_wf.scan(/name:\s*(r5-[a-z0-9\-]+)/).flatten
+          upload_steps = parsed_this.dig("jobs", "reaggregate", "steps").select { |s| s["uses"]&.start_with?("actions/upload-artifact") }
+          uploads = upload_steps.map { |s| s.dig("with", "name") }
           abort "Static scope failed: uploads #{uploads.inspect} != ['r5-formal-reagg']" unless uploads == ["r5-formal-reagg"]
 
           report = "PASS; branch=#{branch}; only reagg marker matches this push; previous markers unchanged; jobs=guard,reaggregate; artifact=r5-formal-reagg"
