@@ -3,7 +3,7 @@ name: R5 formal re-aggregation and gate reconstruction
 on:
   push:
     branches: [r5-field-ventilation-flux]
-    paths: [physbench/r5/R5_FORMAL_REAGG_TRIGGER_ONCE_20261020_v4.txt]
+    paths: [physbench/r5/R5_FORMAL_REAGG_TRIGGER_ONCE_20261020_v5.txt]
 
 permissions:
   contents: read
@@ -48,7 +48,7 @@ jobs:
           token = os.environ["GH_TOKEN"]
           workflow = "physbench_r5_formal_reagg.yml"
           branch = "r5-field-ventilation-flux"
-          marker = "physbench/r5/R5_FORMAL_REAGG_TRIGGER_ONCE_20261020_v4.txt"
+          marker = "physbench/r5/R5_FORMAL_REAGG_TRIGGER_ONCE_20261020_v5.txt"
           base = f"https://api.github.com/repos/{repo}"
           headers = {
               "Accept": "application/vnd.github+json",
@@ -69,8 +69,8 @@ jobs:
           payload = get_json(f"{base}/actions/workflows/{workflow}/runs?branch={branch}&per_page=100")
           runs = payload.get("workflow_runs", [])
           run_ids = [str(r.get("id")) for r in runs]
-          prior_runs = ["39538443127", "39539004837", "39539607494"]
-          if len(runs) != 4 or run_id not in run_ids or not all(pr in run_ids for pr in prior_runs):
+          prior_runs = ["39538443127", "39539004837", "39539607494", "39540112999"]
+          if len(runs) != 5 or run_id not in run_ids or not all(pr in run_ids for pr in prior_runs):
               raise SystemExit(f"One-time guard failed: history of this workflow must contain exactly prior runs {prior_runs} and the current run.")
 
           jobs_3953 = get_json(f"{base}/actions/runs/39538443127/jobs")
@@ -87,6 +87,11 @@ jobs:
           reagg_395396 = [j for j in jobs_395396.get("jobs", []) if j.get("name") == "reaggregate"]
           if not reagg_395396 or reagg_395396[0].get("conclusion") != "failure":
               raise SystemExit("One-time guard failed: prior run 39539607494 reaggregate job was not failure.")
+
+          jobs_39540 = get_json(f"{base}/actions/runs/39540112999/jobs")
+          reagg_39540 = [j for j in jobs_39540.get("jobs", []) if j.get("name") == "reaggregate"]
+          if not reagg_39540 or reagg_39540[0].get("conclusion") != "cancelled":
+              raise SystemExit("One-time guard failed: prior run 39540112999 reaggregate job was not cancelled (timeout).")
 
           # Verify run 39429049087 has m1 = failure and aggregate = failure
           jobs_3942 = get_json(f"{base}/actions/runs/39429049087/jobs")
@@ -126,7 +131,8 @@ jobs:
           old_reagg_marker = "physbench/r5/R5_FORMAL_REAGG_TRIGGER_ONCE_20261020.txt"
           v2_reagg_marker = "physbench/r5/R5_FORMAL_REAGG_TRIGGER_ONCE_20261020_v2.txt"
           v3_reagg_marker = "physbench/r5/R5_FORMAL_REAGG_TRIGGER_ONCE_20261020_v3.txt"
-          reagg_marker = "physbench/r5/R5_FORMAL_REAGG_TRIGGER_ONCE_20261020_v4.txt"
+          v4_reagg_marker = "physbench/r5/R5_FORMAL_REAGG_TRIGGER_ONCE_20261020_v4.txt"
+          reagg_marker = "physbench/r5/R5_FORMAL_REAGG_TRIGGER_ONCE_20261020_v5.txt"
 
           def events_for(document)
             document["on"] || document[true] || {}
@@ -195,7 +201,7 @@ jobs:
   reaggregate:
     needs: [guard]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
