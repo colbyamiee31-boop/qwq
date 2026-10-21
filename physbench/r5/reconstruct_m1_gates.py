@@ -53,7 +53,7 @@ def locate_file(candidates, description):
 
 def main():
     # Resolve directories
-    prep_dir = Path(os.environ.get("PREPARED_DIR", ROOT / "prepared-inputs")).resolve()
+    prep_dir = Path(os.environ.get("PREPARED_DIR", ROOT / "prepared" if (ROOT / "prepared").is_dir() else ROOT / "prepared-inputs")).resolve()
     model_dir = Path(os.environ.get("MODEL_DIR", ROOT / "model-output")).resolve()
     r4_dir = Path(os.environ.get("BASE_R4_DIR", ROOT / "baseline_r4")).resolve()
     out_dir = Path(os.environ.get("OUT_DIR", ROOT / "evidence/R5/FORMAL")).resolve()
@@ -62,12 +62,16 @@ def main():
     # Candidate paths for files
     prep_gate_path = locate_file(
         [prep_dir / "R5_PREPARE_GATE_SUMMARY.json",
+         ROOT / "prepared/R5_PREPARE_GATE_SUMMARY.json",
+         ROOT / "prepared-inputs/R5_PREPARE_GATE_SUMMARY.json",
          ROOT / "physbench/r5/generated/R5_PREPARE_GATE_SUMMARY.json",
          ROOT.parent / "formal_run_v3/r5-formal-prepared-inputs/R5_PREPARE_GATE_SUMMARY.json"],
         "R5_PREPARE_GATE_SUMMARY.json"
     )
     primary_input_path = locate_file(
         [prep_dir / "PRIMARY_97_R2_INPUT.csv",
+         ROOT / "prepared/PRIMARY_97_R2_INPUT.csv",
+         ROOT / "prepared-inputs/PRIMARY_97_R2_INPUT.csv",
          ROOT / "physbench/r5/generated/PRIMARY_97_R2_INPUT.csv",
          ROOT.parent / "formal_run_v3/r5-formal-prepared-inputs/PRIMARY_97_R2_INPUT.csv",
          ROOT.parent / "frozen_artifacts/r2-prepared-inputs/PRIMARY_97_R2_INPUT.csv"],
