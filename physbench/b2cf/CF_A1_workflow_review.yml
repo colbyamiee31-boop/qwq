@@ -1,0 +1,70 @@
+name: B2-A1 G3 G4 audited gate
+on:
+  push:
+    branches: [b2-cf-greenlight]
+    paths: [physbench/b2cf/CF_A1_APPROVED_TRIGGER_ONCE.txt]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: b2-a1-gates-once
+  cancel-in-progress: false
+jobs:
+  audited-gates:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce one approved trigger attempt
+        run: |
+          set -euo pipefail
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$(git diff-tree --root --no-commit-id --name-status -r HEAD)" = $'A\tphysbench/b2cf/CF_A1_APPROVED_TRIGGER_ONCE.txt'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download frozen R5 prepared inputs
+        uses: actions/download-artifact@v4
+        with:
+          name: r5-formal-prepared-inputs
+          path: cf-a1-input
+          run-id: 39429049087
+          github-token: ${{ github.token }}
+      - name: Download frozen R5 reference
+        uses: actions/download-artifact@v4
+        with:
+          name: r5-formal-m1
+          path: cf-a1-r5
+          run-id: 39429049087
+          github-token: ${{ github.token }}
+      - name: Download frozen R4 reference and pip freeze
+        uses: actions/download-artifact@v4
+        with:
+          name: r4-m1
+          path: cf-a1-r4
+          run-id: 37164458429
+          github-token: ${{ github.token }}
+      - name: Install frozen GreenLight environment
+        run: |
+          set -euo pipefail
+          git clone --no-tags https://github.com/BartvLaatum/GreenLight-Gym2.git GreenLight-Gym2
+          git -C GreenLight-Gym2 checkout --detach 2d3febb1ea002b24b452e32293e990beb78d3ce1
+          python -m pip install --upgrade pip
+          python -m pip install -r physbench/r1_2/requirements-m1.txt -c physbench/r5/r4-pip-constraints.txt ./GreenLight-Gym2
+          mkdir -p cf-a1-output
+          python -m pip freeze | sort > cf-a1-output/CF_A1_pip_freeze.txt
+          diff -u cf-a1-r4/evidence_R4_M1_PIP_FREEZE.txt cf-a1-output/CF_A1_pip_freeze.txt > cf-a1-output/CF_A1_pip_freeze_diff.txt
+      - name: Run original R5 field-flux unit tests
+        run: python -I physbench/r5/field_flux.py | tee cf-a1-output/CF_A1_field_flux_unit_tests.log
+      - name: Execute audited G3 then G4
+        run: |
+          set -o pipefail
+          python physbench/b2cf/CF_A1_gate.py 2>&1 | tee cf-a1-output/CF_A1_console.log
+      - name: Upload audited gate outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cf-a1-g3-g4
+          path: cf-a1-output/
+          if-no-files-found: warn
+          retention-days: 90
