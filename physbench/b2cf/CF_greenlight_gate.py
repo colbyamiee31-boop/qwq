@@ -386,4 +386,3 @@ def run_gates():
     pd.DataFrame(response_rows,columns=RESPONSE_COLUMNS).to_csv(OUT/"CF_event_responses.csv",index=False)
     pd.DataFrame(audit_rows,columns=AUDIT_COLUMNS).to_csv(OUT/"CF_runtime_audit.csv",index=False)
 if __name__ == "__main__": run_gates()
-
