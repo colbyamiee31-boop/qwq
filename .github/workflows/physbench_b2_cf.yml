@@ -1,0 +1,65 @@
+name: B2 G3 and G4 gated GreenLight reproduction
+on:
+  push:
+    branches: [b2-cf-greenlight]
+    paths: [.github/workflows/physbench_b2_cf.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  gates:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download frozen prepared inputs
+        uses: actions/download-artifact@v4
+        with:
+          name: r5-formal-prepared-inputs
+          path: cf-prepared
+          run-id: 39429049087
+          github-token: ${{ github.token }}
+      - name: Download frozen R5 reference
+        uses: actions/download-artifact@v4
+        with:
+          name: r5-formal-m1
+          path: cf-baseline
+          run-id: 39429049087
+          github-token: ${{ github.token }}
+      - name: Download frozen R4 environment reference
+        uses: actions/download-artifact@v4
+        with:
+          name: r4-m1
+          path: cf-r4
+          run-id: 37164458429
+          github-token: ${{ github.token }}
+      - name: Verify frozen file identities
+        run: |
+          set -euo pipefail
+          echo '0127756518d8a481d8f79e27b0a0d57bd2b9e6d9d94232202109869f5a792d5b  cf-prepared/PRIMARY_97_R2_INPUT.csv' | sha256sum -c -
+          echo '0a0a427641ef96cf511bd5401ad40edd19106591fbc07fbac20636e3f2a81c49  cf-baseline/evidence/R5/FORMAL/R5_event_responses.csv' | sha256sum -c -
+      - name: Install R5 frozen GreenLight environment
+        run: |
+          set -euo pipefail
+          git clone --no-tags https://github.com/BartvLaatum/GreenLight-Gym2.git GreenLight-Gym2
+          git -C GreenLight-Gym2 checkout --detach 2d3febb1ea002b24b452e32293e990beb78d3ce1
+          python -m pip install --upgrade pip
+          python -m pip install -r physbench/r1_2/requirements-m1.txt -c physbench/r5/r4-pip-constraints.txt ./GreenLight-Gym2
+          mkdir -p cf-output
+          python -m pip freeze | sort > cf-output/CF_pip_freeze.txt
+          diff -u cf-r4/evidence_R4_M1_PIP_FREEZE.txt cf-output/CF_pip_freeze.txt > cf-output/CF_pip_freeze_diff.txt || true
+      - name: Execute G3, then G4 only if G3 passes
+        run: |
+          set -o pipefail
+          python physbench/b2cf/CF_greenlight_gate.py 2>&1 | tee cf-output/CF_console.log
+      - name: Upload gate outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cf-g3-g4
+          path: cf-output/
+          retention-days: 90
+          if-no-files-found: warn
