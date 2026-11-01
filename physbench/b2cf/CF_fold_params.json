@@ -1,0 +1,240 @@
+{
+  "drop_fold_0": {
+    "model": "drop-fold 0 refit (date fold 0 held out), reconstructed from archived 21-node curves",
+    "form": "q_vent = U * [sum_k aL_k * phi_k(vL) + sum_k aW_k * phi_k(vW)] + b * (vL + vW) * sqrt(max(Tin - Tout, 0))",
+    "basis": "phi_k(v) = sigmoid(slope*(v - c_k)) - sigmoid(-slope*c_k), slope=8, c_k = 0, 0.2, 0.4, 0.6, 0.8, 1.0",
+    "units": "q in m3 (air) m-2 (floor) s-1; U wind speed m/s (CTIFL mast, ~8 m); vL, vW leeward/windward feedback fraction 0-1; T in degC",
+    "centres": [
+      0.0,
+      0.2,
+      0.4,
+      0.6000000000000001,
+      0.8,
+      1.0
+    ],
+    "slope": 8.0,
+    "aL": [
+      0.0,
+      0.0007848594296571398,
+      0.0002141475092410747,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "aW": [
+      0.0,
+      0.0005406645511517543,
+      0.0017370711879182994,
+      0.0,
+      2.4768661502814794e-17,
+      1.780203549418306e-13
+    ],
+    "b": 0.0035750913999616,
+    "actuator_lag_min": 0.2198969632599169,
+    "note_lag": "lag < 0.5 min, below the 5-min step; ignore",
+    "heat_factor_s_T": 0.3431128015865528,
+    "co2_factor_s_CO2": 1.29283580754407,
+    "field_leak_m_s": null,
+    "effective_height_m": 7.375,
+    "note_field_leak": "not archived for folds; not used (leakage suppressed in FF0-CF/FFH-CF)"
+  },
+  "drop_fold_1": {
+    "model": "drop-fold 1 refit (date fold 1 held out), reconstructed from archived 21-node curves",
+    "form": "q_vent = U * [sum_k aL_k * phi_k(vL) + sum_k aW_k * phi_k(vW)] + b * (vL + vW) * sqrt(max(Tin - Tout, 0))",
+    "basis": "phi_k(v) = sigmoid(slope*(v - c_k)) - sigmoid(-slope*c_k), slope=8, c_k = 0, 0.2, 0.4, 0.6, 0.8, 1.0",
+    "units": "q in m3 (air) m-2 (floor) s-1; U wind speed m/s (CTIFL mast, ~8 m); vL, vW leeward/windward feedback fraction 0-1; T in degC",
+    "centres": [
+      0.0,
+      0.2,
+      0.4,
+      0.6000000000000001,
+      0.8,
+      1.0
+    ],
+    "slope": 8.0,
+    "aL": [
+      0.0,
+      0.0008280519744191032,
+      0.0003603400062223504,
+      0.0,
+      0.0,
+      6.980349209150557e-17
+    ],
+    "aW": [
+      0.0,
+      0.002513364755188708,
+      1.2436266039453372e-16,
+      0.0,
+      0.0,
+      1.7778069638040486e-13
+    ],
+    "b": 0.0035622740738782,
+    "actuator_lag_min": 0.2198969632598117,
+    "note_lag": "lag < 0.5 min, below the 5-min step; ignore",
+    "heat_factor_s_T": 0.3111901401339523,
+    "co2_factor_s_CO2": 1.0617847266291385,
+    "field_leak_m_s": null,
+    "effective_height_m": 7.375,
+    "note_field_leak": "not archived for folds; not used (leakage suppressed in FF0-CF/FFH-CF)"
+  },
+  "drop_fold_2": {
+    "model": "drop-fold 2 refit (date fold 2 held out), reconstructed from archived 21-node curves",
+    "form": "q_vent = U * [sum_k aL_k * phi_k(vL) + sum_k aW_k * phi_k(vW)] + b * (vL + vW) * sqrt(max(Tin - Tout, 0))",
+    "basis": "phi_k(v) = sigmoid(slope*(v - c_k)) - sigmoid(-slope*c_k), slope=8, c_k = 0, 0.2, 0.4, 0.6, 0.8, 1.0",
+    "units": "q in m3 (air) m-2 (floor) s-1; U wind speed m/s (CTIFL mast, ~8 m); vL, vW leeward/windward feedback fraction 0-1; T in degC",
+    "centres": [
+      0.0,
+      0.2,
+      0.4,
+      0.6000000000000001,
+      0.8,
+      1.0
+    ],
+    "slope": 8.0,
+    "aL": [
+      0.0,
+      0.0008960287137921056,
+      7.71962510572812e-11,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "aW": [
+      0.0,
+      0.002420280013894554,
+      2.1174861411714577e-16,
+      0.0,
+      0.0,
+      1.7767724948275972e-13
+    ],
+    "b": 0.003724242337095,
+    "actuator_lag_min": 0.2198969632595579,
+    "note_lag": "lag < 0.5 min, below the 5-min step; ignore",
+    "heat_factor_s_T": 0.3345419480910219,
+    "co2_factor_s_CO2": 0.947364882356448,
+    "field_leak_m_s": null,
+    "effective_height_m": 7.375,
+    "note_field_leak": "not archived for folds; not used (leakage suppressed in FF0-CF/FFH-CF)"
+  },
+  "drop_fold_3": {
+    "model": "drop-fold 3 refit (date fold 3 held out), reconstructed from archived 21-node curves",
+    "form": "q_vent = U * [sum_k aL_k * phi_k(vL) + sum_k aW_k * phi_k(vW)] + b * (vL + vW) * sqrt(max(Tin - Tout, 0))",
+    "basis": "phi_k(v) = sigmoid(slope*(v - c_k)) - sigmoid(-slope*c_k), slope=8, c_k = 0, 0.2, 0.4, 0.6, 0.8, 1.0",
+    "units": "q in m3 (air) m-2 (floor) s-1; U wind speed m/s (CTIFL mast, ~8 m); vL, vW leeward/windward feedback fraction 0-1; T in degC",
+    "centres": [
+      0.0,
+      0.2,
+      0.4,
+      0.6000000000000001,
+      0.8,
+      1.0
+    ],
+    "slope": 8.0,
+    "aL": [
+      0.0,
+      0.0010238054730347245,
+      2.432160603863515e-08,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "aW": [
+      0.0,
+      0.002338730442397489,
+      1.0638081851459459e-16,
+      0.0,
+      0.0,
+      1.7725731258283848e-13
+    ],
+    "b": 0.0035630624603404,
+    "actuator_lag_min": 0.2198969632594781,
+    "note_lag": "lag < 0.5 min, below the 5-min step; ignore",
+    "heat_factor_s_T": 0.3245321763505167,
+    "co2_factor_s_CO2": 1.2155721960159056,
+    "field_leak_m_s": null,
+    "effective_height_m": 7.375,
+    "note_field_leak": "not archived for folds; not used (leakage suppressed in FF0-CF/FFH-CF)"
+  },
+  "drop_fold_4": {
+    "model": "drop-fold 4 refit (date fold 4 held out), reconstructed from archived 21-node curves",
+    "form": "q_vent = U * [sum_k aL_k * phi_k(vL) + sum_k aW_k * phi_k(vW)] + b * (vL + vW) * sqrt(max(Tin - Tout, 0))",
+    "basis": "phi_k(v) = sigmoid(slope*(v - c_k)) - sigmoid(-slope*c_k), slope=8, c_k = 0, 0.2, 0.4, 0.6, 0.8, 1.0",
+    "units": "q in m3 (air) m-2 (floor) s-1; U wind speed m/s (CTIFL mast, ~8 m); vL, vW leeward/windward feedback fraction 0-1; T in degC",
+    "centres": [
+      0.0,
+      0.2,
+      0.4,
+      0.6000000000000001,
+      0.8,
+      1.0
+    ],
+    "slope": 8.0,
+    "aL": [
+      0.0,
+      0.0008536232455625258,
+      8.20182926540796e-05,
+      0.0,
+      0.0,
+      6.10571886601658e-16
+    ],
+    "aW": [
+      3.4650266962601e-05,
+      0.0032570978758478717,
+      6.005739166414975e-11,
+      0.0,
+      2.727002817801888e-16,
+      1.7743183675870345e-13
+    ],
+    "b": 0.0025836353450223,
+    "actuator_lag_min": 0.2198969632634963,
+    "note_lag": "lag < 0.5 min, below the 5-min step; ignore",
+    "heat_factor_s_T": 0.4078980064560384,
+    "co2_factor_s_CO2": 1.2990498800049346,
+    "field_leak_m_s": null,
+    "effective_height_m": 7.375,
+    "note_field_leak": "not archived for folds; not used (leakage suppressed in FF0-CF/FFH-CF)"
+  },
+  "full": {
+    "model": "field-identified natural ventilation function (multi-tracer UDE, scaled variant, all 385 CTIFL vent events)",
+    "form": "q_vent = U * [sum_k aL_k * phi_k(vL) + sum_k aW_k * phi_k(vW)] + b * (vL + vW) * sqrt(max(Tin - Tout, 0))",
+    "basis": "phi_k(v) = sigmoid(slope*(v - c_k)) - sigmoid(-slope*c_k), slope=8, c_k = 0, 0.2, 0.4, 0.6, 0.8, 1.0",
+    "units": "q in m3 (air) m-2 (floor) s-1; U wind speed m/s (CTIFL mast, ~8 m); vL, vW leeward/windward feedback fraction 0-1; T in degC",
+    "centres": [
+      0.0,
+      0.2,
+      0.4,
+      0.6000000000000001,
+      0.8,
+      1.0
+    ],
+    "slope": 8.0,
+    "aL": [
+      1.2968048927630634e-09,
+      0.0009020653355591891,
+      9.340897079656378e-05,
+      1.1038093064416317e-09,
+      5.169573322893713e-10,
+      3.0966529651730475e-10
+    ],
+    "aW": [
+      2.8152182009448007e-09,
+      0.0024395244111947516,
+      2.464239193700916e-09,
+      3.632089584796509e-11,
+      8.250878186084583e-12,
+      1.7747169971521573e-13
+    ],
+    "b": 0.0034629846815818,
+    "actuator_lag_min": 0.2198969632594526,
+    "note_lag": "lag < 0.5 min, below the 5-min step; ignore",
+    "heat_factor_s_T": 0.3411732668569693,
+    "co2_factor_s_CO2": 1.1324905071896405,
+    "field_leak_m_s": {
+      "T": 9.689458368729234e-08,
+      "AH": 0.004179836611206255,
+      "CO2": 0.0005029108357956682
+    },
+    "effective_height_m": 7.375
+  }
+}
+
