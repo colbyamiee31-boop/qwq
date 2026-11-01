@@ -15,6 +15,8 @@ jobs:
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - name: Enforce one approved trigger attempt
         run: |
           set -euo pipefail
@@ -55,7 +57,9 @@ jobs:
           python -m pip freeze | sort > cf-a1-output/CF_A1_pip_freeze.txt
           diff -u cf-a1-r4/evidence_R4_M1_PIP_FREEZE.txt cf-a1-output/CF_A1_pip_freeze.txt > cf-a1-output/CF_A1_pip_freeze_diff.txt
       - name: Run original R5 field-flux unit tests
-        run: python -I physbench/r5/field_flux.py | tee cf-a1-output/CF_A1_field_flux_unit_tests.log
+        run: |
+          set -o pipefail
+          python -I physbench/r5/field_flux.py | tee cf-a1-output/CF_A1_field_flux_unit_tests.log
       - name: Execute audited G3 then G4
         run: |
           set -o pipefail
