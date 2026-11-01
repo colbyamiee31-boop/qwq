@@ -1,0 +1,95 @@
+name: B2-A1 main audited single run
+on:
+  push:
+    branches: [b2-cf-greenlight]
+    paths: [physbench/b2cf/CF_A1_MAIN_APPROVED_TRIGGER_ONCE.txt]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: b2-a1-main-once
+  cancel-in-progress: false
+jobs:
+  audited-main:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Enforce approved marker-only trigger and first attempt
+        run: |
+          set -euo pipefail
+          test "$GITHUB_RUN_ATTEMPT" = "1"
+          test "$(git diff-tree --root --no-commit-id --name-status -r HEAD)" = $'A\tphysbench/b2cf/CF_A1_MAIN_APPROVED_TRIGGER_ONCE.txt'
+      - name: Verify reviewed code hashes
+        run: |
+          set -euo pipefail
+          echo '8edcafe1372134c5e6dfa25a3f4485246c7f95ae19c6443e2cd7a9a353434350  physbench/b2cf/CF_A1_main.py' | sha256sum -c -
+          echo 'f3eb05cf8c54e8b4e7f41cf3c97632251840efec3e71c5ca8131f6c6af674efb  physbench/b2cf/CF_A1_aggregate_cf.py' | sha256sum -c -
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download frozen R5 prepared inputs
+        uses: actions/download-artifact@v4
+        with:
+          name: r5-formal-prepared-inputs
+          path: cf-a1-input
+          run-id: 39429049087
+          github-token: ${{ github.token }}
+      - name: Download frozen R5 reference
+        uses: actions/download-artifact@v4
+        with:
+          name: r5-formal-m1
+          path: cf-a1-r5
+          run-id: 39429049087
+          github-token: ${{ github.token }}
+      - name: Download frozen R4 reference
+        uses: actions/download-artifact@v4
+        with:
+          name: r4-m1
+          path: cf-a1-r4
+          run-id: 37164458429
+          github-token: ${{ github.token }}
+      - name: Download frozen R3 HV reference
+        uses: actions/download-artifact@v4
+        with:
+          name: r3-m1
+          path: cf-a1-r3
+          run-id: 37163085468
+          github-token: ${{ github.token }}
+      - name: Verify frozen HV reference before simulation
+        run: |
+          set -euo pipefail
+          echo 'f102765b460b1646e82017a6f6c9761f4b072b7eab027ce6b23238557c6a8ffe  cf-a1-r3/evidence/R3/M1/ctifl_event_responses.csv' | sha256sum -c -
+          echo 'a11efaeef73fdf8b4a47e1d267b123b703fc1615d5a85aa257a2d6859b5fbe07  cf-a1-r5/evidence/R5/FORMAL/R5_alignment_states.csv' | sha256sum -c -
+      - name: Install frozen GreenLight environment
+        run: |
+          set -euo pipefail
+          git clone --no-tags https://github.com/BartvLaatum/GreenLight-Gym2.git GreenLight-Gym2
+          git -C GreenLight-Gym2 checkout --detach 2d3febb1ea002b24b452e32293e990beb78d3ce1
+          python -m pip install --upgrade pip
+          python -m pip install -r physbench/r1_2/requirements-m1.txt -c physbench/r5/r4-pip-constraints.txt ./GreenLight-Gym2
+          mkdir -p cf-a1-main-output
+          python -m pip freeze | sort > cf-a1-main-output/CF_A1_pip_freeze.txt
+          diff -u cf-a1-r4/evidence_R4_M1_PIP_FREEZE.txt cf-a1-main-output/CF_A1_pip_freeze.txt > cf-a1-main-output/CF_A1_pip_freeze_diff.txt
+      - name: Run original field-flux unit tests
+        run: |
+          set -o pipefail
+          python -I physbench/r5/field_flux.py | tee cf-a1-main-output/CF_A1_field_flux_unit_tests.log
+      - name: Audited C8 environment check then main
+        run: |
+          set -o pipefail
+          python physbench/b2cf/CF_A1_main.py 2>&1 | tee cf-a1-main-output/CF_A1_main_console.log
+      - name: Aggregate with frozen R5 statistical rules
+        run: |
+          set -o pipefail
+          python physbench/b2cf/CF_A1_aggregate_cf.py 2>&1 | tee cf-a1-main-output/CF_A1_aggregate_console.log
+      - name: Upload audited main outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cf-a1-main
+          path: cf-a1-main-output/
+          if-no-files-found: warn
+          retention-days: 90
