@@ -374,6 +374,7 @@ def main():
     source_hashes = verify_source_hashes()
     fixed_inputs = {
         "cf-a1-input/PRIMARY_97_R2_INPUT.csv": "0127756518d8a481d8f79e27b0a0d57bd2b9e6d9d94232202109869f5a792d5b",
+        "cf-a1-input/R5_PREPARE_GATE_SUMMARY.json": "f3bd7b99667651ae6ff5139dcc0add173eb44b90af1c7e35a23ea81391eec843",
         "cf-a1-r5/evidence/R5/FORMAL/R5_event_responses.csv": "0a0a427641ef96cf511bd5401ad40edd19106591fbc07fbac20636e3f2a81c49",
         "cf-a1-r4/evidence/R4/M1/ctifl_common_flux_responses.csv": "968812fe9d26c30ed452fa1a4430f1d73f4bc9cae777033b326aef437aeb719f",
         "cf-a1-r4/evidence/R4/M1/runtime_audit.csv": "8c37b35eeeba096172a0824843058b0d9ed8ff39dbd7b3848d0e9841d1e1060c",
